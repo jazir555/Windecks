@@ -1,0 +1,846 @@
+[
+ {
+  "idx": 0,
+  "code": "0x00",
+  "cat": "system",
+  "old_desc": "0x59b10",
+  "new_desc": "0x645b0",
+  "old_stride": 8,
+  "new_stride": 18
+ },
+ {
+  "idx": 1,
+  "code": "0x01",
+  "cat": "system",
+  "old_desc": "0x59b18",
+  "new_desc": "0x645c2",
+  "old_stride": 10,
+  "new_stride": 26
+ },
+ {
+  "idx": 2,
+  "code": "0x02",
+  "cat": "system",
+  "old_desc": "0x59b22",
+  "new_desc": "0x645dc",
+  "old_stride": 26,
+  "new_stride": 16
+ },
+ {
+  "idx": 3,
+  "code": "0x03",
+  "cat": "system",
+  "old_desc": "0x59b3c",
+  "new_desc": "0x645ec",
+  "old_stride": 16,
+  "new_stride": 24
+ },
+ {
+  "idx": 4,
+  "code": "0x04",
+  "cat": "system",
+  "old_desc": "0x59b4c",
+  "new_desc": "0x64604",
+  "old_stride": 24,
+  "new_stride": 10
+ },
+ {
+  "idx": 5,
+  "code": "0x05",
+  "cat": "system",
+  "old_desc": "0x59b64",
+  "new_desc": "0x6460e",
+  "old_stride": 10,
+  "new_stride": 26
+ },
+ {
+  "idx": 6,
+  "code": "0x06",
+  "cat": "system",
+  "old_desc": "0x59b6e",
+  "new_desc": "0x64628",
+  "old_stride": 26,
+  "new_stride": 18
+ },
+ {
+  "idx": 7,
+  "code": "0x07",
+  "cat": "system",
+  "old_desc": "0x59b88",
+  "new_desc": "0x6463a",
+  "old_stride": 18,
+  "new_stride": 18
+ },
+ {
+  "idx": 8,
+  "code": "0x08",
+  "cat": "system",
+  "old_desc": "0x59b9a",
+  "new_desc": "0x6464c",
+  "old_stride": 43,
+  "new_stride": 25
+ },
+ {
+  "idx": 9,
+  "code": "0x09",
+  "cat": "system",
+  "old_desc": "0x59bc5",
+  "new_desc": "0x64665",
+  "old_stride": 16,
+  "new_stride": 16
+ },
+ {
+  "idx": 10,
+  "code": "0x0a",
+  "cat": "system",
+  "old_desc": "0x59bd5",
+  "new_desc": "0x64675",
+  "old_stride": 41,
+  "new_stride": 12
+ },
+ {
+  "idx": 11,
+  "code": "0x0b",
+  "cat": "system",
+  "old_desc": "0x59bfe",
+  "new_desc": "0x64681",
+  "old_stride": 18,
+  "new_stride": 29
+ },
+ {
+  "idx": 12,
+  "code": "0x0c",
+  "cat": "system",
+  "old_desc": "0x59c10",
+  "new_desc": "0x6469e",
+  "old_stride": 17,
+  "new_stride": 18
+ },
+ {
+  "idx": 13,
+  "code": "0x0d",
+  "cat": "system",
+  "old_desc": "0x59c21",
+  "new_desc": "0x646b0",
+  "old_stride": 18,
+  "new_stride": 17
+ },
+ {
+  "idx": 14,
+  "code": "0x0e",
+  "cat": "system",
+  "old_desc": "0x59c33",
+  "new_desc": "0x646c1",
+  "old_stride": 12,
+  "new_stride": 18
+ },
+ {
+  "idx": 15,
+  "code": "0x0f",
+  "cat": "system",
+  "old_desc": "0x59c3f",
+  "new_desc": "0x646d3",
+  "old_stride": 22,
+  "new_stride": 12
+ },
+ {
+  "idx": 16,
+  "code": "0x10",
+  "cat": "system",
+  "old_desc": "0x59c55",
+  "new_desc": "0x646df",
+  "old_stride": 24,
+  "new_stride": 22
+ },
+ {
+  "idx": 17,
+  "code": "0x11",
+  "cat": "system",
+  "old_desc": "0x59c6d",
+  "new_desc": "0x646f5",
+  "old_stride": 12,
+  "new_stride": 24
+ },
+ {
+  "idx": 18,
+  "code": "0x12",
+  "cat": "system",
+  "old_desc": "0x59c79",
+  "new_desc": "0x6470d",
+  "old_stride": 18,
+  "new_stride": 12
+ },
+ {
+  "idx": 19,
+  "code": "0x13",
+  "cat": "system",
+  "old_desc": "0x59c8b",
+  "new_desc": "0x64719",
+  "old_stride": 15,
+  "new_stride": 18
+ },
+ {
+  "idx": 20,
+  "code": "0x14",
+  "cat": "system",
+  "old_desc": "0x59c9a",
+  "new_desc": "0x6472b",
+  "old_stride": 60,
+  "new_stride": 15
+ },
+ {
+  "idx": 21,
+  "code": "0x15",
+  "cat": "system",
+  "old_desc": "0x59cd6",
+  "new_desc": "0x6473a",
+  "old_stride": 15,
+  "new_stride": 16
+ },
+ {
+  "idx": 22,
+  "code": "0x16",
+  "cat": "system",
+  "old_desc": "0x59ce5",
+  "new_desc": "0x6474a",
+  "old_stride": 83,
+  "new_stride": 13
+ },
+ {
+  "idx": 23,
+  "code": "0x17",
+  "cat": "system",
+  "old_desc": "0x59d38",
+  "new_desc": "0x64757",
+  "old_stride": 30,
+  "new_stride": 31
+ },
+ {
+  "idx": 24,
+  "code": "0x18",
+  "cat": "system",
+  "old_desc": "0x59d56",
+  "new_desc": "0x64776",
+  "old_stride": 32,
+  "new_stride": 15
+ },
+ {
+  "idx": 25,
+  "code": "0x19",
+  "cat": "system",
+  "old_desc": "0x59d76",
+  "new_desc": "0x64785",
+  "old_stride": 23,
+  "new_stride": 17
+ },
+ {
+  "idx": 26,
+  "code": "0x1a",
+  "cat": "system",
+  "old_desc": "0x59d8d",
+  "new_desc": "0x64796",
+  "old_stride": 15,
+  "new_stride": 36
+ },
+ {
+  "idx": 27,
+  "code": "0x1b",
+  "cat": "system",
+  "old_desc": "0x59d9c",
+  "new_desc": "0x647ba",
+  "old_stride": 35,
+  "new_stride": 30
+ },
+ {
+  "idx": 28,
+  "code": "0x1c",
+  "cat": "system",
+  "old_desc": "0x59dbf",
+  "new_desc": "0x647d8",
+  "old_stride": 38,
+  "new_stride": 30
+ },
+ {
+  "idx": 29,
+  "code": "0x1d",
+  "cat": "system",
+  "old_desc": "0x59de5",
+  "new_desc": "0x647f6",
+  "old_stride": 13,
+  "new_stride": 32
+ },
+ {
+  "idx": 30,
+  "code": "0x1e",
+  "cat": "system",
+  "old_desc": "0x59df2",
+  "new_desc": "0x64816",
+  "old_stride": 22,
+  "new_stride": 23
+ },
+ {
+  "idx": 31,
+  "code": "0x1f",
+  "cat": "system",
+  "old_desc": "0x59e08",
+  "new_desc": "0x6482d",
+  "old_stride": 15,
+  "new_stride": 15
+ },
+ {
+  "idx": 32,
+  "code": "0x20",
+  "cat": "system",
+  "old_desc": "0x59e17",
+  "new_desc": "0x6483c",
+  "old_stride": 12,
+  "new_stride": 15
+ },
+ {
+  "idx": 33,
+  "code": "0x21",
+  "cat": "system",
+  "old_desc": "0x59e23",
+  "new_desc": "0x6484b",
+  "old_stride": 47,
+  "new_stride": 20
+ },
+ {
+  "idx": 34,
+  "code": "0x22",
+  "cat": "system",
+  "old_desc": "0x59e52",
+  "new_desc": "0x6485f",
+  "old_stride": 17,
+  "new_stride": 24
+ },
+ {
+  "idx": 35,
+  "code": "0x23",
+  "cat": "system",
+  "old_desc": "0x59e63",
+  "new_desc": "0x64877",
+  "old_stride": 27,
+  "new_stride": 14
+ },
+ {
+  "idx": 36,
+  "code": "0x24",
+  "cat": "system",
+  "old_desc": "0x59e7e",
+  "new_desc": "0x64885",
+  "old_stride": 41,
+  "new_stride": 13
+ },
+ {
+  "idx": 37,
+  "code": "0x2d",
+  "cat": "config",
+  "old_desc": "0x59ea7",
+  "new_desc": "0x64892",
+  "old_stride": 32,
+  "new_stride": 22
+ },
+ {
+  "idx": 38,
+  "code": "0x2e",
+  "cat": "config",
+  "old_desc": "0x59ec7",
+  "new_desc": "0x648a8",
+  "old_stride": 8,
+  "new_stride": 15
+ },
+ {
+  "idx": 39,
+  "code": "0x3c",
+  "cat": "config",
+  "old_desc": "0x59ecf",
+  "new_desc": "0x648b7",
+  "old_stride": 580,
+  "new_stride": 12
+ },
+ {
+  "idx": 40,
+  "code": "0x3d",
+  "cat": "config",
+  "old_desc": "0x5a113",
+  "new_desc": "0x648c3",
+  "old_stride": -567,
+  "new_stride": 47
+ },
+ {
+  "idx": 41,
+  "code": "0x3e",
+  "cat": "config",
+  "old_desc": "0x59edc",
+  "new_desc": "0x648f2",
+  "old_stride": 21,
+  "new_stride": 17
+ },
+ {
+  "idx": 42,
+  "code": "0x3f",
+  "cat": "config",
+  "old_desc": "0x59ef1",
+  "new_desc": "0x64903",
+  "old_stride": 20,
+  "new_stride": 27
+ },
+ {
+  "idx": 43,
+  "code": "0x40",
+  "cat": "config",
+  "old_desc": "0x59f05",
+  "new_desc": "0x6491e",
+  "old_stride": 30,
+  "new_stride": 19
+ },
+ {
+  "idx": 44,
+  "code": "0x41",
+  "cat": "config",
+  "old_desc": "0x59f23",
+  "new_desc": "0x64931",
+  "old_stride": 11,
+  "new_stride": 22
+ },
+ {
+  "idx": 45,
+  "code": "0x42",
+  "cat": "config",
+  "old_desc": "0x59f2e",
+  "new_desc": "0x64947",
+  "old_stride": 19,
+  "new_stride": 9
+ },
+ {
+  "idx": 46,
+  "code": "0x43",
+  "cat": "config",
+  "old_desc": "0x59f41",
+  "new_desc": "0x64950",
+  "old_stride": 24,
+  "new_stride": 23
+ },
+ {
+  "idx": 47,
+  "code": "0x44",
+  "cat": "config",
+  "old_desc": "0x59f59",
+  "new_desc": "0x64967",
+  "old_stride": 16,
+  "new_stride": 8
+ },
+ {
+  "idx": 48,
+  "code": "0x45",
+  "cat": "input_report",
+  "old_desc": "0x59f69",
+  "new_desc": "0x6496f",
+  "old_stride": 14,
+  "new_stride": 13
+ },
+ {
+  "idx": 49,
+  "code": "0x46",
+  "cat": "input_report",
+  "old_desc": "0x59f77",
+  "new_desc": "0x6497c",
+  "old_stride": 20,
+  "new_stride": 21
+ },
+ {
+  "idx": 50,
+  "code": "0x47",
+  "cat": "input_report",
+  "old_desc": "0x59f8b",
+  "new_desc": "0x64991",
+  "old_stride": 32,
+  "new_stride": 20
+ },
+ {
+  "idx": 51,
+  "code": "0x4a",
+  "cat": "led",
+  "old_desc": "0x59fab",
+  "new_desc": "0x649a5",
+  "old_stride": 19,
+  "new_stride": 30
+ },
+ {
+  "idx": 52,
+  "code": "0x4d",
+  "cat": "led",
+  "old_desc": "0x59fbe",
+  "new_desc": "0x649c3",
+  "old_stride": 12,
+  "new_stride": 11
+ },
+ {
+  "idx": 53,
+  "code": "0x53",
+  "cat": "config",
+  "old_desc": "0x59fca",
+  "new_desc": "0x649ce",
+  "old_stride": 38,
+  "new_stride": 19
+ },
+ {
+  "idx": 54,
+  "code": "0x54",
+  "cat": "config",
+  "old_desc": "0x59ff0",
+  "new_desc": "0x649e1",
+  "old_stride": 37,
+  "new_stride": 24
+ },
+ {
+  "idx": 55,
+  "code": "0x55",
+  "cat": "config",
+  "old_desc": "0x5a015",
+  "new_desc": "0x649f9",
+  "old_stride": 32,
+  "new_stride": 16
+ },
+ {
+  "idx": 56,
+  "code": "0x56",
+  "cat": "config",
+  "old_desc": "0x5a035",
+  "new_desc": "0x64a09",
+  "old_stride": 62,
+  "new_stride": 14
+ },
+ {
+  "idx": 57,
+  "code": "0x57",
+  "cat": "config",
+  "old_desc": "0x5a073",
+  "new_desc": "0x64a17",
+  "old_stride": 38,
+  "new_stride": 20
+ },
+ {
+  "idx": 58,
+  "code": "0x58",
+  "cat": "config",
+  "old_desc": "0x5a099",
+  "new_desc": "0x64a2b",
+  "old_stride": 25,
+  "new_stride": 15
+ },
+ {
+  "idx": 59,
+  "code": "0x5a",
+  "cat": "config",
+  "old_desc": "0x5a0b2",
+  "new_desc": "0x64a3a",
+  "old_stride": 20,
+  "new_stride": 17
+ },
+ {
+  "idx": 60,
+  "code": "0x5b",
+  "cat": "config",
+  "old_desc": "0x5a0c6",
+  "new_desc": "0x64a4b",
+  "old_stride": 27,
+  "new_stride": 19
+ },
+ {
+  "idx": 61,
+  "code": "0x5c",
+  "cat": "config",
+  "old_desc": "0x5a0e1",
+  "new_desc": "0x64a5e",
+  "old_stride": 504,
+  "new_stride": 12
+ },
+ {
+  "idx": 62,
+  "code": "0x5f",
+  "cat": "config",
+  "old_desc": "0x5a2d9",
+  "new_desc": "0x64a6a",
+  "old_stride": -261,
+  "new_stride": 38
+ },
+ {
+  "idx": 63,
+  "code": "0x68",
+  "cat": "calibration",
+  "old_desc": "0x5a1d4",
+  "new_desc": "0x64a90",
+  "old_stride": -219,
+  "new_stride": 37
+ },
+ {
+  "idx": 64,
+  "code": "0x69",
+  "cat": "calibration",
+  "old_desc": "0x5a0f9",
+  "new_desc": "0x64ab5",
+  "old_stride": 34,
+  "new_stride": 32
+ },
+ {
+  "idx": 65,
+  "code": "0x6a",
+  "cat": "calibration",
+  "old_desc": "0x5a11b",
+  "new_desc": "0x64ad5",
+  "old_stride": 48,
+  "new_stride": 62
+ },
+ {
+  "idx": 66,
+  "code": "0x6b",
+  "cat": "calibration",
+  "old_desc": "0x5a14b",
+  "new_desc": "0x64b13",
+  "old_stride": 31,
+  "new_stride": 38
+ },
+ {
+  "idx": 67,
+  "code": "0x6c",
+  "cat": "calibration",
+  "old_desc": "0x5a16a",
+  "new_desc": "0x64b39",
+  "old_stride": 31,
+  "new_stride": 25
+ },
+ {
+  "idx": 68,
+  "code": "0x6d",
+  "cat": "calibration",
+  "old_desc": "0x5a189",
+  "new_desc": "0x64b52",
+  "old_stride": 23,
+  "new_stride": 20
+ },
+ {
+  "idx": 69,
+  "code": "0x6e",
+  "cat": "calibration",
+  "old_desc": "0x5a1a0",
+  "new_desc": "0x64b66",
+  "old_stride": 33,
+  "new_stride": 27
+ },
+ {
+  "idx": 70,
+  "code": "0x6f",
+  "cat": "calibration",
+  "old_desc": "0x5a1c1",
+  "new_desc": "0x64b81",
+  "old_stride": 44,
+  "new_stride": 24
+ },
+ {
+  "idx": 71,
+  "code": "0x70",
+  "cat": "calibration",
+  "old_desc": "0x5a1ed",
+  "new_desc": "0x64b99",
+  "old_stride": 45,
+  "new_stride": 26
+ },
+ {
+  "idx": 72,
+  "code": "0x71",
+  "cat": "calibration",
+  "old_desc": "0x5a21a",
+  "new_desc": "0x64bb3",
+  "old_stride": -874,
+  "new_stride": 8
+ },
+ {
+  "idx": 73,
+  "code": "0x72",
+  "cat": "calibration",
+  "old_desc": "0x59eb0",
+  "new_desc": "0x64bbb",
+  "old_stride": -442,
+  "new_stride": 48
+ },
+ {
+  "idx": 74,
+  "code": "0x73",
+  "cat": "calibration",
+  "old_desc": "0x59cf6",
+  "new_desc": "0x64beb",
+  "old_stride": 1596,
+  "new_stride": 31
+ },
+ {
+  "idx": 75,
+  "code": "0x74",
+  "cat": "calibration",
+  "old_desc": "0x5a332",
+  "new_desc": "0x64c0a",
+  "old_stride": -1672,
+  "new_stride": 31
+ },
+ {
+  "idx": 76,
+  "code": "0x75",
+  "cat": "calibration",
+  "old_desc": "0x59caa",
+  "new_desc": "0x64c29",
+  "old_stride": 257,
+  "new_stride": 23
+ },
+ {
+  "idx": 77,
+  "code": "0x76",
+  "cat": "calibration",
+  "old_desc": "0x59dab",
+  "new_desc": "0x64c40",
+  "old_stride": -244,
+  "new_stride": 33
+ },
+ {
+  "idx": 78,
+  "code": "0x77",
+  "cat": "calibration",
+  "old_desc": "0x59cb7",
+  "new_desc": "0x64c61",
+  "old_stride": -267,
+  "new_stride": 19
+ },
+ {
+  "idx": 79,
+  "code": "0x78",
+  "cat": "calibration",
+  "old_desc": "0x59bac",
+  "new_desc": "0x64c74",
+  "old_stride": 53,
+  "new_stride": 25
+ },
+ {
+  "idx": 80,
+  "code": "0x79",
+  "cat": "calibration",
+  "old_desc": "0x59be1",
+  "new_desc": "0x64c8d",
+  "old_stride": 1856,
+  "new_stride": 23
+ },
+ {
+  "idx": 81,
+  "code": "0x7a",
+  "cat": "battery_power",
+  "old_desc": "0x5a321",
+  "new_desc": "0x64ca4",
+  "old_stride": -903,
+  "new_stride": 22
+ },
+ {
+  "idx": 82,
+  "code": "0x7b",
+  "cat": "battery_power",
+  "old_desc": "0x59f9a",
+  "new_desc": "0x64cba",
+  "old_stride": 697,
+  "new_stride": 33
+ },
+ {
+  "idx": 83,
+  "code": "0x7c",
+  "cat": "battery_power",
+  "old_desc": "0x5a253",
+  "new_desc": "0x64cdb",
+  "old_stride": -79,
+  "new_stride": 24
+ },
+ {
+  "idx": 84,
+  "code": "0x7d",
+  "cat": "battery_power",
+  "old_desc": "0x5a204",
+  "new_desc": "0x64cf3",
+  "old_stride": -1258,
+  "new_stride": 26
+ },
+ {
+  "idx": 85,
+  "code": "0x7e",
+  "cat": "battery_power",
+  "old_desc": "0x59d1a",
+  "new_desc": "0x64d0d",
+  "old_stride": 1363,
+  "new_stride": 28
+ },
+ {
+  "idx": 86,
+  "code": "0x7f",
+  "cat": "battery_power",
+  "old_desc": "0x5a26d",
+  "new_desc": "0x64d29",
+  "old_stride": -50,
+  "new_stride": 19
+ },
+ {
+  "idx": 87,
+  "code": "0x80",
+  "cat": "haptic",
+  "old_desc": "0x5a23b",
+  "new_desc": "0x64d3c",
+  "old_stride": -1124,
+  "new_stride": 22
+ },
+ {
+  "idx": 88,
+  "code": "0x86",
+  "cat": "config",
+  "old_desc": "0x59dd7",
+  "new_desc": "0x64d52",
+  "old_stride": 186,
+  "new_stride": 20
+ },
+ {
+  "idx": 89,
+  "code": "0x8a",
+  "cat": "firmware",
+  "old_desc": "0x59e91",
+  "new_desc": "0x64d66",
+  "old_stride": 1130,
+  "new_stride": 19
+ },
+ {
+  "idx": 90,
+  "code": "0x8b",
+  "cat": "firmware",
+  "old_desc": "0x5a2fb",
+  "new_desc": "0x64d79",
+  "old_stride": -114,
+  "new_stride": 34
+ },
+ {
+  "idx": 91,
+  "code": "0x8c",
+  "cat": "firmware",
+  "old_desc": "0x5a289",
+  "new_desc": "0x64d9b",
+  "old_stride": 19,
+  "new_stride": 38
+ },
+ {
+  "idx": 92,
+  "code": "0x8d",
+  "cat": "firmware",
+  "old_desc": "0x5a29c",
+  "new_desc": "0x64dc1",
+  "old_stride": 22,
+  "new_stride": 17
+ },
+ {
+  "idx": 93,
+  "code": "0x8e",
+  "cat": "firmware",
+  "old_desc": "0x5a2b2",
+  "new_desc": "0x64dd2"
+ }
+]

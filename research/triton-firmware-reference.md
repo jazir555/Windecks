@@ -1,6 +1,6 @@
 # Triton (SC2 BLE Controller) Firmware Reference
 
-> **Platform**: Nordic nRF52840 (ARM Cortex-M4F), Zephyr OS v3.7.99-af30fca7cecd, nRF Connect SDK v2.9.0-d93dcad627bd, Nordic SoftDevice Controller  
+> **Platform**: Nordic nRF52833 (ARM Cortex-M4F), Zephyr OS v3.7.99-af30fca7cecd, nRF Connect SDK v2.9.0-d93dcad627bd, Nordic SoftDevice Controller  
 > **Firmware**: `ibex_firmware.bin` (350,528 bytes), 2,027 functions, 73,705 lines of pseudocode  
 > **Decompiler**: Ghidra 11.3.1 — analysis based on string cross-references, UUID values, and code pattern matching (no debug symbols)
 
@@ -969,7 +969,7 @@ Both follow: lookup command type → negate → call dispatch via wrapper → bu
 
 2. **The dispatch function is a pure lookup table** — It takes a command code, returns the corresponding DAT_ descriptor pointer. The caller then uses the descriptor to invoke the actual handler.
 
-3. **Response formatter is BLE-side** — `FUN_0000c55c` formats responses for commands that travel between the BLE stack and the main controller logic within the same nRF52840 chip.
+3. **Response formatter is BLE-side** — `FUN_0000c55c` formats responses for commands that travel between the BLE stack and the main controller logic within the same nRF52833 chip.
 
 4. **Command size table is runtime** — `FUN_00013c30` reads from RAM (`0x2000d168`), so the size data is initialized at boot from flash configuration. Covers codes `0x00`–`0x55` only.
 
@@ -981,7 +981,7 @@ Both follow: lookup command type → negate → call dispatch via wrapper → bu
 
 ## 6. Haptic System — Three-Path Architecture
 
-### Path 1: Firmware-Local Haptics (SC2 nRF52840 only)
+### Path 1: Firmware-Local Haptics (SC2 nRF52833 only)
 
 The SC2 firmware has a complete, self-contained haptic sequencer that generates feedback **independently of the host**. The host does NOT upload haptic patterns — scripts are firmware-internal, selected by ID.
 
@@ -1380,7 +1380,7 @@ Key behavioral differences:
 
 ### Firmware Binary Limitation
 
-`ibex_firmware.bin` is 350,528 bytes (33.4% of nRF52840's 1MB flash). Command descriptor structures at `0x59b10`–`0x5a332` (19KB beyond the dump) are unreadable. Full flash dump via J-Link/SWD needed to read:
+`ibex_firmware.bin` is 350,528 bytes (66.9% of nRF52833's 512 KB flash). Command descriptor structures at `0x59b10`–`0x5a332` (~15 KB beyond the dump) are unreadable — and per `research/firmware-dump-assessment.md` they sit outside every Valve DFU ever shipped. Full flash dump via J-Link/SWD needed to read:
 - 94 command descriptor structures (8-62 bytes each, variable-length)
 - Haptic motor speed calculation code (addresses ≥ `0x55940`)
 - 0x8F sub-command dispatcher implementation at `0x54368`

@@ -189,7 +189,7 @@ This project produced a detailed map of Steam's controller handling architecture
 | 0xf2 ACK | `0x00042132` | 6-byte minimal response: `[01 00 00 00 00 f2]`, no payload |
 | Motor output | Command 0x80 | uint16 LE speed + int8 gain per motor, I2S peripheral |
 | Haptic sequencer | I2S driver | Script IDs + gain + master_gain_db, stereo waveform output |
-| Flash limitation | 33.4% | Binary is 350KB of 1MB flash. Descriptors at 0x59b10-0x5a332 beyond dump |
+| Flash limitation | 66.9% | Binary is 350KB of 512KB flash. Descriptors at 0x59b10-0x5a332 beyond dump |
 
 ### Full Decompilation
 
@@ -233,7 +233,7 @@ This project produced a detailed map of Steam's controller handling architecture
 │   ├── pair.py                      # Pexpect auto-pair (handles KDE dialog)
 │   └── connect_deck.py              # BLE connection (subprocess-based)
 ├── firmware/
-│   ├── ibex_firmware.bin            # Triton SC2 BLE firmware (350KB, nRF52840)
+│   ├── ibex_firmware.bin            # Triton SC2 BLE firmware (350KB, nRF52833)
 │   └── proteus_firmware.bin         # Puck Dongle firmware (194KB)
 ├── ghidra-projects/exports/32bit/   # Full decompilation (141K functions, 6.7M lines)
 ├── dbus-config/                     # D-Bus system policy
@@ -297,7 +297,7 @@ grep -n "0x50\]" ~/ghidra-projects/exports/32bit/full_decompiled_32bit.c
 ## Known Issues
 
 - **Steam-generated haptics not working** — Architecturally blocked. The haptic scheduler at `0x123e5d0` is never called for BLE controllers. `CPulseHapticWorkItem` fires with 0.0ms runtime (work item short-circuits before entering scheduler). Block is upstream in controller setup/dispatch. Real SC2 also doesn't get 0x8F haptics over BLE. See `docs/findings-backlog.md`.
-- **Firmware binary truncated** — `ibex_firmware.bin` is 33.4% of nRF52840's 1MB flash. Command descriptors at 0x59b10-0x5a332 are beyond the dump. Full flash dump via J-Link/SWD needed.
+- **Firmware binary truncated** — `ibex_firmware.bin` is 66.9% of nRF52833's 512KB flash. Command descriptors at 0x59b10-0x5a332 are beyond the dump. Full flash dump via J-Link/SWD needed.
 - **PnP ID warning** — BlueZ logs `Error reading PNP_ID: Protocol error` (non-fatal)
 - **KDE pairing dialog** — Host shows dialog during pairing, user must click "yes"
 - **Stale BlueZ state** — After code changes break a connection, clear bond data and restart BlueZ daemon. See `AGENTS.md` for the fix.
@@ -309,7 +309,7 @@ grep -n "0x50\]" ~/ghidra-projects/exports/32bit/full_decompiled_32bit.c
 - **BLE traffic capture** — btmon capture from a real SC2 would show exact ATT traffic, confirming our synthetic command responses
 - **Haptics** — Capturing what Steam sends for trackpad clicks and UI feedback
 - **Protocol refinements** — Verifying edge cases and timing behavior
-- **Firmware flash dump** — J-Link/SWD dump of the full nRF52840 flash would resolve the remaining firmware unknowns
+- **Firmware flash dump** — J-Link/SWD dump of the full nRF52833 flash would resolve the remaining firmware unknowns
 
 If you have a real SC2 and want to help, start with `docs/findings-backlog.md` for the full technical analysis.
 

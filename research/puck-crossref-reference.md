@@ -6,7 +6,7 @@
 - Puck firmware: `proteus_firmware.bin` (197,740 bytes, 790 functions)
 - Triton firmware: `ibex_firmware.bin` (350,528 bytes, 2,027 functions)
 - steamclient.so (49MB, 32-bit i386)
-- Both firmwares: Nordic nRF52840 (ARM Cortex-M4F), Zephyr RTOS, nRF Connect SDK v2.9.0
+- Both firmwares: Nordic nRF52833 (ARM Cortex-M4F), Zephyr RTOS, nRF Connect SDK v2.9.0
 
 ---
 
@@ -14,7 +14,7 @@
 
 ### Firmware Overview
 
-- **Chip**: Nordic nRF52840 (ARM Cortex-M4F), Zephyr RTOS
+- **Chip**: Nordic nRF52833 (ARM Cortex-M4F), Zephyr RTOS
 - **SDK**: nRF Connect SDK v2.9.0-d93dcad627bd
 - **Binary**: 197,740 bytes (193 KB), 790 functions
 - **Stack pointer**: 0x20015d00 (RAM)
@@ -68,7 +68,7 @@ The Puck presents a composite HID device to the host PC using HID-over-I2C (`boa
 | String | Meaning |
 |--------|---------|
 | `board_hid_over_i2c` | I2C HID bridge function |
-| `i2c@40003000` | nRF52840 TWIM0 (I2C peripheral) |
+| `i2c@40003000` | nRF52833 TWIM0 (I2C peripheral) |
 | `i2c_hid` | I2C HID driver |
 | `i2c_nrfx_twis` | Nordic TWIS (Two Wire Interface Slave) |
 | `Failed to initialize HID I2C bus` | I2C bus init error |
@@ -76,7 +76,7 @@ The Puck presents a composite HID device to the host PC using HID-over-I2C (`boa
 | `Failed to prepare DMA for I2C read/write` | DMA transfer error |
 | `HID over I2C doesn't have a concept of SoF. Ignoring the callback` | I2C vs USB timing |
 
-The Puck has a **native USB** connection to the host PC (nRF52840 has built-in USB). The `i2c_hid` and `board_hid_over_i2c` are likely used for **internal** communication between the nRF52840 and another chip on the Puck PCB, or for the EC (Embedded Controller) input interface.
+The Puck has a **native USB** connection to the host PC (nRF52833 has built-in USB). The `i2c_hid` and `board_hid_over_i2c` are likely used for **internal** communication between the nRF52833 and another chip on the Puck PCB, or for the EC (Embedded Controller) input interface.
 
 ---
 
@@ -194,7 +194,7 @@ Both firmwares use the **Zephyr ESB library** (`libesb`), which implements Nordi
 | Parameter | Value | Evidence |
 |-----------|-------|----------|
 | **Protocol** | Nordic ESB | `dongle_esb`, `triton_esb` module names |
-| **Frequency band** | 2.4 GHz ISM | Standard ESB, nRF52840 radio |
+| **Frequency band** | 2.4 GHz ISM | Standard ESB, nRF52833 radio |
 | **Data rate** | 2 Mbps | Default Zephyr ESB, 45-byte reports at high rate |
 | **Channel spacing** | 1 MHz | ESB standard |
 | **Channel range** | 2-126 | ESB standard, configurable via `esb_set_rf_channel` |
@@ -429,7 +429,7 @@ get_id_get_string_attribute
 ```
 SC2 Controller
   → ESB radio (2.4 GHz, 2 Mbps)
-    → Puck nRF52840 ESB receiver
+    → Puck nRF52833 ESB receiver
       → ESB packet decode (per-slot: esb/ibex_N)
         → Protocol version check
           → HID proxy (HID_PROXY_N)
@@ -1088,7 +1088,7 @@ On BLE (our spoof):
 | `ec-input-tap@0` through `@3` | Per-controller EC tap inputs |
 | `Failed to register a HID proxy tap %d` | EC tap registration |
 | `board_hid_over_i2c` | I2C HID bridge function |
-| `i2c@40003000` | nRF52840 TWIM0 (I2C peripheral) |
+| `i2c@40003000` | nRF52833 TWIM0 (I2C peripheral) |
 | `i2c_hid` | I2C HID driver |
 | `i2c_nrfx_twis` | Nordic TWIS |
 | `Failed to initialize HID I2C bus` | I2C bus init error |
@@ -1212,7 +1212,7 @@ On BLE (our spoof):
 
 2. **Feature Report contents**: What exactly is exchanged in Feature Reports 0x01/0x02? (Calibration data, firmware version, capabilities bitmap — would need to capture an actual exchange.)
 
-3. **ESB encryption**: Is the ESB link encrypted? (ESB supports encryption via the nRF52840's CRYPTOCELL, but the firmware strings don't confirm this.)
+3. **ESB encryption**: Is the ESB link encrypted? (Nordic ESB supports encryption via CRYPTOCELL, but the CC310 is absent on the nRF52833 and the firmware strings don't confirm encryption — likely unencrypted.)
 
 4. **ESB timing parameters**: Exact retry delay, auto-ACK window, and retransmit count (configured in Zephyr ESB library, not visible from application strings.)
 

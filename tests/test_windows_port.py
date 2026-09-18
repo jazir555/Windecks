@@ -53,6 +53,64 @@ def test_sc2_get_serial_format():
     assert resp[3:4] == b"F", resp[3:23]
 
 
+def test_sc2_settings_defaults_and_maxs():
+    h = SC2CommandHandler()
+    # 0x89 with no overrides returns real firmware defaults (sc26re).
+    resp = h.handle_set_report(3, 0x01, bytes([0x89, 0x00, 0x02, 0x09, 0x40] + [0] * 59))
+    assert resp[0] == 0x89 and resp[1] == 0x02
+    assert resp[2:5] == bytes([0x09, 0x01, 0x00]), resp[2:5].hex()  # lizard_mode=1
+    assert resp[5:8] == bytes([0x40, 0x04, 0x00]), resp[5:8].hex()  # frame_rate=4
+    back = h.handle_get_report(3, 0x01)
+    assert back == resp
+    # 0x8C defaults / 0x8B maxs shapes.
+    d = h.handle_set_report(3, 0x01, bytes([0x8C, 0x00, 0x01, 0x44] + [0] * 60))
+    assert d[:5] == bytes([0x8C, 0x01, 0x44, 0x5A, 0x00]), d[:5].hex()  # reg68 default=90
+    m = h.handle_set_report(3, 0x01, bytes([0x8B, 0x00, 0x01, 0x44] + [0] * 60))
+    assert m[:5] == bytes([0x8B, 0x01, 0x44, 0x63, 0x00]), m[:5].hex()  # max=99
+    # 0x87 override is clamped to max, visible via 0x89.
+    h.handle_set_report(3, 0x01, bytes([0x87, 0x03, 0x02, 0x44, 0xFF, 0xFF] + [0] * 58))
+    r = h.handle_set_report(3, 0x01, bytes([0x89, 0x00, 0x01, 0x44] + [0] * 60))
+    assert r[2:5] == bytes([0x44, 0x63, 0x00]), r[2:5].hex()
+    # 0x8E restores defaults.
+    h.handle_set_report(3, 0x01, bytes([0x8E] + [0] * 63))
+    r2 = h.handle_set_report(3, 0x01, bytes([0x89, 0x00, 0x01, 0x44] + [0] * 60))
+    assert r2[2:5] == bytes([0x44, 0x5A, 0x00]), r2[2:5].hex()  # back to 90
+
+
+def test_sc2_stage_commit_and_read_delete():
+    h = SC2CommandHandler()
+    h.handle_set_report(3, 0x01, bytes([0xEE, 0x00, 0x09, 0x00, 0x00] + [0] * 59))
+    r = h.handle_set_report(3, 0x01, bytes([0xED, 0x00, 0x09] + [0] * 61))
+    assert r[:5] == bytes([0xED, 0x01, 0x09, 0x01, 0x00]), r[:5].hex()  # still default
+    h.handle_set_report(3, 0x01, bytes([0xEF] + [0] * 63))
+    r2 = h.handle_set_report(3, 0x01, bytes([0xED, 0x00, 0x09] + [0] * 61))
+    assert r2[:5] == bytes([0xED, 0x01, 0x09, 0x00, 0x00]), r2[:5].hex()  # staged applied
+    h.handle_set_report(3, 0x01, bytes([0xF0, 0x00, 0x09] + [0] * 61))
+    r3 = h.handle_set_report(3, 0x01, bytes([0xED, 0x00, 0x09] + [0] * 61))
+    assert r3[:5] == bytes([0xED, 0x01, 0x09, 0x01, 0x00]), r3[:5].hex()  # default back
+
+
+def test_sc2_dangerous_opcodes_ack_only():
+    h = SC2CommandHandler()
+    for cmd in (0x90, 0x95, 0x9F, 0xB5, 0xFE):
+        resp = h.handle_set_report(3, 0x01, bytes([cmd] + [0] * 63))
+        assert resp is not None and resp[0] == cmd and resp[1] == 0x00 and len(resp) == 64
+
+
+def test_sc2_device_info_led_userstore():
+    h = SC2CommandHandler()
+    d = h.handle_set_report(3, 0x01, bytes([0xA1, 0x00, 0x01] + [0] * 61))
+    assert d[0] == 0xA1 and d[1] == 0x12 and d[2] == 0x01 and len(d) == 64
+    d0 = h.handle_set_report(3, 0x01, bytes([0xA1, 0x00, 0x00] + [0] * 61))
+    assert d0[2:20] == b"\x00" * 18
+    h.handle_set_report(3, 0x01, bytes([0xC5, 0x00, 10, 20, 30, 40] + [0] * 58))
+    g = h.handle_set_report(3, 0x01, bytes([0xE9] + [0] * 63))
+    assert g[:6] == bytes([0xE9, 0x04, 10, 20, 30, 40]), g[:6].hex()
+    h.handle_set_report(3, 0x01, bytes([0xDC, 0x00, 0x07, 1, 2, 3, 4, 5] + [0] * 56))
+    u = h.handle_set_report(3, 0x01, bytes([0xDB, 0x00, 0x07] + [0] * 61))
+    assert u[0] == 0xDB and u[2:7] == bytes([1, 2, 3, 4, 5]), u[:8].hex()
+
+
 def test_synthetic_dict_shape():
     got = []
     src = SyntheticWinInput(on_report=got.append)

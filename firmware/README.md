@@ -6,7 +6,7 @@ The actual firmware binaries are not stored in this repository. They are extract
 
 | Field | Value |
 |-------|-------|
-| **Platform** | Nordic nRF52840, ARM Cortex-M4F |
+| **Platform** | Nordic nRF52833, ARM Cortex-M4F (512 KB flash / 128 KB RAM) |
 | **SDK** | nRF Connect SDK v2.9.0 |
 | **Zephyr** | v3.7.99-af30fca7cecd |
 | **Size** | 350,528 bytes |
@@ -20,7 +20,7 @@ The actual firmware binaries are not stored in this repository. They are extract
 
 | Field | Value |
 |-------|-------|
-| **Platform** | Nordic nRF52840, ARM Cortex-M4F |
+| **Platform** | Nordic nRF52833, ARM Cortex-M4F (512 KB flash / 128 KB RAM) |
 | **SDK** | nRF Connect SDK v2.9.0 |
 | **Zephyr** | v3.7.99-af30fca7cecd |
 | **Size** | 197,740 bytes |

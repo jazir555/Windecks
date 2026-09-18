@@ -16,7 +16,7 @@
 
 ### Firmware-Confirmed Layout
 
-The real SC2 firmware (nRF52840, Zephyr RTOS) registers GATT services as follows:
+The real SC2 firmware (nRF52833, Zephyr RTOS) registers GATT services as follows:
 
 - **HID Service (0x1812)** — Explicitly registered in firmware (`FUN_0001d8d0`). Contains up to 6 input Report characteristics, up to 10 output/feature Report characteristics, and 1 optional custom CHR_REPORT.
 - **GAP (0x1800)** and **GATT (0x1801)** — Pre-registered by Zephyr BLE stack, looked up by firmware.

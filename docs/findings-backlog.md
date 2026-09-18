@@ -18,7 +18,7 @@ Serial format `F0000-0000-00000000`. `BYieldingCompleteSteamControllerRegistrati
 
 ## Haptic Architecture
 
-### Path 1: Firmware-Local Haptics (SC2 nRF52840 only)
+### Path 1: Firmware-Local Haptics (SC2 nRF52833 only)
 Trackpad touch, button press, grip touch/detouch generate haptic feedback entirely within firmware.
 - Modules: `haptics-sequencer-touchpad`, `haptics-sequencer-gri-v3`, `haptics_sequencer`
 - Scripts are firmware-internal, selected by ID (host does NOT upload patterns)
@@ -183,7 +183,7 @@ These are correctness improvements, not blockers. Fix one at a time, test betwee
 
 ### 4. Full Firmware Dump
 
-`ibex_firmware.bin` is 33.4% of nRF52840's 1MB flash. Command descriptors at 0x59b10–0x5a332 beyond the dump. J-Link/SWD needed for full flash dump and further firmware RE.
+`ibex_firmware.bin` is 66.9% of nRF52833's 512KB flash. Command descriptors at 0x59b10–0x5a332 beyond the dump. J-Link/SWD needed for full flash dump and further firmware RE.
 
 ### 5. Steam Haptics — ABANDONED
 
