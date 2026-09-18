@@ -1,0 +1,21 @@
+# Windows port dependencies (install with: pip install -r requirements-windows.txt)
+#
+# NOTE: `winsdk` only publishes pre-releases (1.0.0bN). Either
+#   pip install --pre -r requirements-windows.txt
+# or rely on the `winrt-*` packages pulled in by bleak (they already
+# provide Windows.Devices.Bluetooth.GenericAttributeProfile).
+#
+# NOTE: `vgamepad` 0.1.0's setup.py launches the ViGEmBus MSI installer
+# interactively, which hangs non-interactive pip installs. Install the
+# driver FIRST (see scripts/setup-windows.ps1 for the silent
+# `msiexec /qn` command), then pip install will detect it and skip the
+# prompt. Latest vgamepad is 0.1.x (there is no 1.0).
+bleak>=0.21          # BLE central (verify advertisements, read GATT from Deck). Peripheral role is via WinRT, not bleak.
+winsdk>=1.0.0b1      # WinRT projections (Windows.Devices.Bluetooth.GenericAttributeProfile) for BLE GATT server (pre-release; use --pre)
+pygame>=2.5          # Optional: physical joystick/XInput capture on Windows
+pytest>=8.0          # Tests
+
+# Virtual controller (replaces Linux vhci_hcd + UHID). Requires the
+# ViGEmBus driver (setup-v1.17.333) installed separately, otherwise
+# `import vgamepad` raises VIGEM_ERROR_BUS_NOT_FOUND at import time.
+vgamepad>=0.1.0
