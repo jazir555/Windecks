@@ -289,6 +289,14 @@ class WinBleServer:
         params = GattServiceProviderAdvertisingParameters()
         params.is_connectable = True
         params.is_discoverable = True
+        # NOTE: the status briefly reports ABORTED(3) right after start on
+        # some radios before settling to STARTED(2) — transient, not fatal.
+        def _on_adv_status(sender, _args):
+            try:
+                print(f"[ble] advertisement status: {sender.advertisement_status}")
+            except Exception:
+                pass
+        hid.add_advertisement_status_changed(_on_adv_status)
         try:
             hid.start_advertising_with_parameters(params)
         except OSError as e:

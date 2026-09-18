@@ -42,7 +42,7 @@ powershell -File scripts/run-windows.ps1 -Mode vigem
   `VIGEM_ERROR_BUS_NOT_FOUND` at import time — all Windecks imports of it
   are lazy/guarded for this reason.
 
-## BLE validation (2026-09-18, host with Realtek BT + broken Intel BT)
+## BLE validation (2026-09-18, host with Realtek BT + Intel BT)
 
 - GATT database construction via WinRT: **works**. Providers + characteristics
   created with `error=0`, including NOTIFY characteristics and the Valve
@@ -51,15 +51,58 @@ powershell -File scripts/run-windows.ps1 -Mode vigem
   `create_characteristic_async` require `uuid.UUID` (Guid), not `str`;
   characteristic read/write event handlers fire on arbitrary WinRT threads
   and must marshal via `loop.call_soon_threadsafe`.
-- Advertising on this host: **fails** — `start_advertising_with_parameters`
-  raises `WinError -2147024580` ("device does not support the command
-  feature"). The radio lacks LE peripheral-role support (Intel BT adapter
-  is in driver-Error state; Realtek is the active radio). `WinBleServer`
-  reports this as a clear `RuntimeError`; `--mode vigem` is unaffected.
-- Note: this host already shows a cached `BTHLEDEVICE … VID&0228DE` +
-  `SteamController` entry — a previous Deck SC2-spoof connection — so the
-  Windows HOGP host side is known-good; only local advertising needs a
-  capable radio to re-validate end to end.
+- Advertising: **works on the Intel radio** (verified 2026-09-18 after the
+  Code 31 fix below) — `[+] WinRT BLE advertising as 'Steam Controller 2026'
+  (4 services)`. It previously failed on the Realtek radio with
+  `WinError -2147024580`. No new BTHUSB Event 34 after switching to Intel,
+  confirming LE peripheral-role support. `WinBleServer` still reports a
+  clear `RuntimeError` if advertising is ever unsupported; `--mode vigem`
+  is unaffected.
+- Note: the cached `SteamController` BTHLE entry on this host is a Steam
+  Controller 1 (separate device) — ignore it for SC2 validation.
+- Status quirk: advertisement status briefly reports ABORTED(3) right after
+  start before settling to STARTED(2) — transient on this radio, not fatal
+  (logged by the status handler in `win_ble.py`).
+- Still open: over-the-air confirmation from a second device (nRF Connect /
+  Deck `bluetoothctl` discovery + Steam Input recognizing the SC2).
+
+## ViGEm validation (2026-09-18, ViGEmBus driver installed)
+
+- `import vgamepad` OK; `WinVigemTarget` connects to a real `VX360Gamepad`.
+- `main_windows.py --mode vigem --input synthetic` runs end to end
+  (Xbox 360 target connected, synthetic reports flowing).
+- Spot-check: SC2 `0x0001|0x0800|0x4000` → XUSB `0x1009` (A + DPAD_UP +
+  DPAD_RIGHT) with sticks/triggers passed through — mapping correct.
+
+## Intel Bluetooth Code 31 fix (dual-radio conflict, 2026-09-18)
+
+Symptoms: `Intel(R) Wireless Bluetooth(R)` (`USB\VID_8087&PID_0025`) shows
+`CM_PROB_FAILED_ADD` / Code 31 while `Realtek Bluetooth Adapter`
+(`USB\VID_0BDA&PID_C820`) is OK.
+
+Root cause: Windows supports only **one active Bluetooth adapter at a time**
+(System log: BTHUSB Event 6 "Only one active Bluetooth adapter is supported
+at a time"). The Intel driver (24.20.0.3, `oem150.inf`) is correctly bound —
+`setupapi.dev.log` shows the driver install succeeding — so this is a
+policy block, not a corrupt driver. Bonus: the Realtek radio lacks LE
+peripheral role (BTHUSB Event 34), which is exactly what `--mode ble`
+advertising needs, so the Intel radio is the one to keep.
+
+Fix (elevated): `powershell -ExecutionPolicy Bypass -File scripts/fix-intel-bt.ps1`
+which skips the already-disabled Realtek adapter, power-cycles the Intel
+adapter via `pnputil /restart-device` (`Enable-PnpDevice` is a no-op on a
+device stuck in `FAILED_ADD`), rescans devices (`pnputil /scan-devices`),
+and restarts `bthserv`/`BTAGService` (with `-Force`).
+Verified 2026-09-18: Intel went `Error/CM_PROB_FAILED_ADD` (problem status
+`3221225473`) → `OK/CM_PROB_NONE`, BTHUSB logged only Event 18 (link-key
+notice, benign) with no new Event 6/34, and `--mode ble` advertising
+succeeded.
+Re-enable the dongle later with:
+`Enable-PnpDevice -InstanceId 'USB\VID_0BDA&PID_C820*' -Confirm:$false`.
+If Intel is still Code 31 after the script: cold reboot (full shutdown, not
+fast-startup restart) so it enumerates as the sole radio; then Device
+Manager > uninstall device (keep driver) > scan; then reinstall Intel BT
+24.x; then check BIOS onboard-Bluetooth is Enabled.
 
 ## Steam visibility
 
