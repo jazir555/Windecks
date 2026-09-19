@@ -11,10 +11,48 @@ Windecks on Windows replaces each Linux-only layer with a Windows equivalent.
 | `adv.py`/`bluez.py` (BlueZ advertising) | `win_ble.py` advertising | experimental |
 | `agent.py` (BlueZ Agent1) | not needed — Windows handles SMP pairing | n/a |
 | `main_virtual_usb.py` (vhci_hcd) + `main_uhid.py` (/dev/uhid) | `src/win_vigem.py` (ViGEmBus `VX360Gamepad`) | working |
+| `main_virtual_usb.py` (vhci_hcd) + `main_uhid.py` (/dev/uhid) | `src/win_hidmaestro.py` (HIDMaestro, true VID/PID) | experimental |
 | `input_handler.py` Neptune `/dev/hidraw3` + evdev | `src/win_input.py` (pygame/XInput + synthetic) | working |
+| host rumble to Neptune ERM (`_forward_haptic_to_neptune`) | `src/win_haptics.py` (host rumble → physical pad) | working (needs rumble-capable pad) |
 | `fcntl` HID feature-report ioctls | in-memory responses in `sc2_commands.py` | done |
 | `scripts/*.sh` | `scripts/setup-windows.ps1`, `scripts/run-windows.ps1` | done |
-| entrypoint | `src/main_windows.py` (`--mode vigem|ble|both`) | done |
+| entrypoint | `src/main_windows.py` (`--mode vigem\|hidmaestro\|ble\|both`) | done |
+
+## Virtual devices and VID/PID
+
+ViGEmBus emulates Xbox 360 / DS4 with **fixed** VIDs (`045E`/`054C`):
+Steam sees an Xbox pad, never an SC2. There is no ViGEm option for
+custom VID/PID (and ViGEmBus itself is retired). Evaluated alternatives:
+
+- **HIDMaestro** (MIT, user-mode UMDF2, no kernel driver, no
+  test-signing boot mode) — presents exact hardware identity
+  (VID/PID, product string, descriptor, bus type) and ships a
+  **`steam-controller-2` persona (28DE:1302)**: real 372-byte Triton
+  descriptor plus the attribute values Steam validates, taken from two
+  independent hardware reads. This is the true-spoof path on Windows:
+  `run-windows.ps1 -Mode hidmaestro` (needs the HIDMaestro SDK build +
+  `pip install pythonnet`; `src/win_hidmaestro.py`, experimental).
+  Also ships `steam-deck-composite` (28DE:1205, full Neptune USB
+  identity from `lsusb`) and `steam-controller-composite` (28DE:1102).
+- **libvirtualhid** (LizardByte) — same UMDF2/VHF idea, but virtual
+  gamepads need a **paid yearly/lifetime license** on Windows.
+  Rejected on cost; HIDMaestro is free (MIT) for this use.
+- **Rolling our own VHF driver** — rejected: writing a new kernel-adjacent
+  driver from scratch is strictly worse than driving HIDMaestro's
+  validated one; only revisit if a profile HIDMaestro can't express is
+  needed (its profiles are data-driven JSON, so that day may never come).
+
+## Haptics
+
+- Game rumble flows host → virtual device on every backend: ViGEm
+  notifications, BLE 0x80 writes, HIDMaestro output events.
+  `RumbleRouter` (`src/win_haptics.py`) forwards those to the physical
+  pad (`pygame` rumble, probed so missing APIs degrade silently),
+  with 30 ms identical-repeat throttling. Disable with `--no-rumble`.
+- Steam-generated 0x8F haptics **never arrive over BLE by Steam design**
+  (scheduler never entered; real SC2 identical) — not pursued. See
+  `docs/sc1-reference.md` for the SC1 host-driven precedent vs SC2-BLE,
+  and the Deck-side software-sequencer sketch (future work).
 
 ## Setup
 
@@ -29,12 +67,15 @@ powershell -File scripts/run-windows.ps1 -Mode vigem
   server is not portable; WinRT GATT server is the path.
 - `main_virtual_usb.py` imports `fcntl` at top — cannot be imported on
   Windows; hence the `sc2_commands.py` extraction.
-- ViGEmBus emulates Xbox 360 / DS4 (VID `045E`/`054C`), so it cannot spoof
-  SC2 VID `28DE`/PID `1303` — Steam sees an Xbox pad, not an SC2, via that
-  path. True SC2 spoof on Windows requires the BLE GATT-server path.
+- ViGEmBus VID/PID are fixed — true SC2 identity needs `--mode hidmaestro`
+  (see above), not ViGEm.
 - WinRT GATT server needs `bleak` (pulls in `winrt-*` projections) and the
   Bluetooth capability; HID-over-GATT (0x1812) as a published service is
   untested against the Windows HOGP host + Steam.
+- Battery level is live (`GetSystemPowerStatus`, `None` on desktops) and
+  flows into reports + Battery notifies; `0xBE` keeps the open-firmware
+  empty-body shape (SC1 precedent: battery travels via status/power-supply
+  channels — see `docs/sc1-reference.md`).
 - `vgamepad` 0.1.0's `setup.py` launches the ViGEmBus MSI interactively,
   hanging non-interactive pip installs. Install the driver first
   (`setup-windows.ps1` uses `msiexec /qn`); pip then detects it and skips

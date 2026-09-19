@@ -154,12 +154,48 @@ class WinBleServer:
     def service_count(self):
         return len(self._providers)
 
+    def set_battery(self, pct):
+        """Update host battery level (0-100) for notifies + SC2 handler."""
+        if self._sc2 is not None:
+            try:
+                self._sc2.set_battery_level(pct)
+            except Exception:
+                pass
+        try:
+            pct = max(0, min(100, int(pct)))
+        except (TypeError, ValueError):
+            return
+        data = bytes([pct])
+        with self._lock:
+            self._static_values["battery"] = data
+        if self._loop is not None:
+            try:
+                self._loop.call_soon_threadsafe(
+                    lambda: asyncio.ensure_future(self._notify_key("battery", data)))
+            except Exception as e:
+                print(f"[-] win_ble battery notify error: {e}")
+
+    async def _notify_key(self, key, data):
+        char = self._notify_chars.get(key)
+        if char is None:
+            return
+        try:
+            await char.notify_value_async(_to_buffer(data))
+        except Exception:
+            pass
+
     # -- input path ---------------------------------------------------
     def update_reports(self, reports):
         """Push latest input reports to notify characteristics (thread-safe)."""
         if self._loop is None:
             return
         rep = dict(reports or {})
+        battery = rep.get("battery")
+        if isinstance(battery, int) and self._sc2 is not None:
+            try:
+                self._sc2.set_battery_level(battery)
+            except Exception:
+                pass
         try:
             self._loop.call_soon_threadsafe(
                 lambda: asyncio.ensure_future(self._notify_all(rep)))

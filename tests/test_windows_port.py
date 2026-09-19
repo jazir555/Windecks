@@ -17,12 +17,14 @@ from platform_compat import IS_WINDOWS  # noqa: E402
 import win_input  # noqa: E402
 from win_input import (  # noqa: E402
     SyntheticWinInput, build_12b, build_45b, build_47b,
-    _axis_to_short, _axis_to_trigger,
+    _axis_to_short, _axis_to_trigger, get_system_battery_percent,
 )
 from win_vigem import (  # noqa: E402
     parse_sc2_12b, sc2_buttons_to_xusb_flags, XUSB_FLAG, WinVigemTarget,
 )
 from win_ble import uuid16_str, _winrt_props, _parse_haptic_80  # noqa: E402
+from win_haptics import RumbleRouter, make_pygame_output  # noqa: E402
+from win_hidmaestro import WinHidMaestroTarget  # noqa: E402
 
 
 def test_gatt_db_builds():
@@ -169,7 +171,13 @@ def test_synthetic_dict_shape():
     assert len(rep["gamepad_45b"]) == 45
     assert len(rep["gamepad_47b"]) == 47
     assert rep["mouse_4b"] is None and rep["kbd_8b"] is None
-    assert rep["battery"] == 100
+    # Battery is the live host level (None on desktops without a battery).
+    assert rep["battery"] is None or 0 <= rep["battery"] <= 100
+
+
+def test_system_battery_never_raises():
+    v = get_system_battery_percent()
+    assert v is None or 0 <= v <= 100
 
 
 def test_build_12b_45b_layout():
@@ -327,3 +335,98 @@ def test_winble_feature_read_roundtrip():
     s._on_feature(bytes([0x83] + [0] * 63))
     resp = s._sc2.handle_get_report(3, 0x83)
     assert resp is not None and resp[0] == 0x83 and len(resp) == 64
+
+
+def test_sc2_battery_level_clamped():
+    h = SC2CommandHandler()
+    h.set_battery_level(42)
+    assert h.battery_level == 42
+    h.set_battery_level(999)
+    assert h.battery_level == 100
+    h.set_battery_level(-5)
+    assert h.battery_level == 0
+    h.set_battery_level("nonsense")  # invalid input leaves level unchanged
+    assert h.battery_level == 0
+    # 0xBE keeps the open-firmware empty-body shape regardless of level.
+    h.set_battery_level(77)
+    resp = h.handle_set_report(3, 0x01, bytes([0xBE] + [0] * 63))
+    assert resp[:2] == bytes([0xBE, 0x00]) and len(resp) == 64
+
+
+def test_rumble_router_scaling_and_throttle():
+    seen = []
+    r = RumbleRouter([lambda l, rr, d: seen.append((l, rr, d))],
+                     min_interval_ms=1000)
+    assert r.from_vigem(255, 128, 0) is True
+    assert seen[-1] == (1.0, 128 / 255.0, 200)
+    # Identical repeat inside the window is dropped.
+    assert r.from_vigem(255, 128, 0) is False
+    assert r.dropped >= 1
+    # Changed values always pass.
+    assert r.from_vigem(0, 0, 0) is True
+    assert seen[-1] == (0.0, 0.0, 0)
+    # BLE 0-65535 scaling.
+    assert r.from_ble_haptic(65535, 32768) is True
+    assert seen[-1][0] == 1.0 and abs(seen[-1][1] - 32768 / 65535.0) < 1e-9
+    # Disabled router never forwards.
+    r2 = RumbleRouter([lambda l, rr, d: seen.append((l, rr, d))], enabled=False)
+    assert r2.from_vigem(255, 255, 0) is False
+
+
+def test_pygame_output_guards_missing_api():
+    class NoRumble:
+        pass
+    out = make_pygame_output(lambda: NoRumble())
+    out(1.0, 1.0, 100)  # must not raise
+
+    class Rumbler:
+        def __init__(self):
+            self.calls = []
+        def rumble(self, low, high, duration):
+            self.calls.append((low, high, duration))
+        def stop_rumble(self):
+            self.calls.append("stop")
+    js = Rumbler()
+    out2 = make_pygame_output(lambda: js)
+    out2(0.5, 0.25, 150)
+    assert js.calls == [(0.5, 0.25, 150)]
+    out2(0.0, 0.0, 0)
+    assert js.calls[-1] == "stop"
+    out3 = make_pygame_output(lambda: None)
+    out3(1.0, 1.0, 100)  # must not raise
+
+
+class FakeHMController:
+    def __init__(self):
+        self.states = []
+
+    def SubmitState(self, state):
+        self.states.append(state)
+
+
+def test_hidmaestro_dict_mode_mapping():
+    fake = FakeHMController()
+    t = WinHidMaestroTarget(controller=fake)
+    st = t.send_report(build_12b(0x0001 | 0x0800 | 0x8000, 16384, -16384, 0, 0, 255, 0))
+    assert st[0] == (0x0001 | 0x0800 | 0x8000)
+    assert len(fake.states) == 1
+    s = fake.states[0]
+    assert "A" in s["buttons"] and "DpadUp" in s["buttons"]
+    assert "B" not in s["buttons"]
+    assert abs(s["lx"] - 0.5) < 1e-6 and abs(s["ly"] + 0.5) < 1e-6
+    assert s["lt"] == 1.0 and s["rt"] == 0.0
+    # Grips have no standard-pad equivalent and are dropped from names.
+    assert not any("rip" in b for b in s["buttons"])
+    # handle_reports dict shape + output event path.
+    t.handle_reports({"gamepad_12b": build_12b(0x0002, 0, 0, 0, 0, 0, 0)})
+    assert fake.states[-1]["buttons"] == ["B"]
+    seen = []
+    t2 = WinHidMaestroTarget(controller=FakeHMController(),
+                             on_output=lambda l, r: seen.append((l, r)))
+
+    class Args:
+        LeftMotor = 0.7
+        RightMotor = 0.3
+    t2._on_output_event(None, Args())
+    assert seen == [(0.7, 0.3)]
+    assert t2.last_output == (0.7, 0.3)

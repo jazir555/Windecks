@@ -136,7 +136,22 @@ class SC2CommandHandler:
         self._user_store = {}       # 0xDB/0xDC key -> bytes
         self._led_color = bytes(4)  # 0xC5/E9 RGBW
         self._digital_mappings = bytearray()  # 0x80/0x82 store (cap 60)
+        self.battery_level = 100    # 0-100 host battery (see set_battery_level)
         self._pending_response = {}  # report_id -> bytes (64)
+
+    def set_battery_level(self, pct):
+        """Set the host battery level (0-100). Feeds Battery notifies.
+
+        NOTE: 0xBE GET_BATTERY_DATA intentionally keeps its empty-body
+        shape from the open firmware. SC1 precedent (kernel hid-steam.c):
+        battery travels via the power-supply class / status events, not
+        feature reads — the BLE Battery service notify is the channel.
+        """
+        try:
+            pct = int(pct)
+        except (TypeError, ValueError):
+            return
+        self.battery_level = max(0, min(100, pct))
 
     # -- HID-level entry points -------------------------------------------
     def handle_set_report(self, report_type, report_id, data):

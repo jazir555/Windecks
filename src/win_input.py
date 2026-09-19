@@ -36,6 +36,46 @@ import time
 HZ_SYNTHETIC = 10
 HZ_PYGAME = 60
 
+# get_system_battery_percent() cache (GetSystemPowerStatus is cheap, but
+# reports only need ~0.1 Hz freshness).
+_BATTERY_CACHE = {"value": None, "at": 0.0}
+BATTERY_CACHE_TTL = 10.0
+
+
+def get_system_battery_percent():
+    """Host battery 0-100, or None on desktops / unknown.
+
+    Win32 GetSystemPowerStatus via ctypes. BatteryLifePercent == 255
+    means unknown/no battery. Never raises.
+    """
+    now = time.monotonic()
+    if now - _BATTERY_CACHE["at"] < BATTERY_CACHE_TTL:
+        return _BATTERY_CACHE["value"]
+    value = None
+    try:
+        import ctypes
+
+        class _PS(ctypes.Structure):
+            _fields_ = [
+                ("ACLineStatus", ctypes.c_byte),
+                ("BatteryFlag", ctypes.c_byte),
+                ("BatteryLifePercent", ctypes.c_byte),
+                ("Reserved1", ctypes.c_byte),
+                ("BatteryLifeTime", ctypes.c_ulong),
+                ("BatteryFullLifeTime", ctypes.c_ulong),
+            ]
+
+        ps = _PS()
+        if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(ps)):
+            pct = int(ps.BatteryLifePercent)
+            if 0 <= pct <= 100:
+                value = pct
+    except Exception:
+        value = None
+    _BATTERY_CACHE["value"] = value
+    _BATTERY_CACHE["at"] = now
+    return value
+
 # pygame button index -> SC2 12-byte button bit (standard mapping:
 # 0=A 1=B 2=X 3=Y 4=LB 5=RB 6=Back 7=Start 8=L3 9=R3).
 PYGAME_BUTTON_TO_SC2 = {
@@ -144,8 +184,12 @@ class SyntheticWinInput:
             gamepad_12b=b"\x00" * 12,
             gamepad_45b=build_45b(self.seq_num, 0, timestamp_us=ts),
             gamepad_47b=build_47b(self.seq_num, 0, timestamp_us=ts),
-            battery=100,
+            battery=get_system_battery_percent(),
         )
+
+    def rumble(self, low01, high01, duration_ms=200):
+        """No physical device in synthetic mode: no-op."""
+        return False
 
     def _loop(self):
         period = 1.0 / max(1, self.hz)
@@ -254,7 +298,30 @@ class PygameWinInput:
                                   lx, ly, rx, ry, lt16, rt16, ts),
             gamepad_47b=build_47b(self.seq_num, buttons & 0xFFFF,
                                   lx, ly, rx, ry, lt16, rt16, ts),
+            battery=get_system_battery_percent(),
         )
+
+    def rumble(self, low01, high01, duration_ms=200):
+        """Play rumble on the physical joystick. Returns True if sent."""
+        js = self._js
+        if js is None:
+            return False
+        fn = getattr(js, "rumble", None)
+        if not callable(fn):
+            return False
+        try:
+            if low01 or high01:
+                fn(float(low01), float(high01), int(duration_ms))
+            else:
+                stop = getattr(js, "stop_rumble", None)
+                if callable(stop):
+                    stop()
+                else:
+                    fn(0.0, 0.0, 0)
+            return True
+        except Exception as e:
+            print(f"[-] pygame rumble error: {type(e).__name__}: {e}")
+            return False
 
     def _loop(self):
         period = 1.0 / max(1, self.hz)

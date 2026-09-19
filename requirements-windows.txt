@@ -19,3 +19,8 @@ pytest>=8.0          # Tests
 # ViGEmBus driver (setup-v1.17.333) installed separately, otherwise
 # `import vgamepad` raises VIGEM_ERROR_BUS_NOT_FOUND at import time.
 vgamepad>=0.1.0
+
+# Optional: HIDMaestro backend (true VID/PID, e.g. 28DE:1302). Needs the
+# HIDMaestro SDK built (VS2022 + WDK + .NET 10, scripts\build_all.cmd)
+# or a release binary. MIT, user-mode UMDF2, no kernel driver.
+# pythonnet>=3.0  # --mode hidmaestro only
