@@ -171,15 +171,15 @@ The vtable checks validate the controller object's class hierarchy, which is set
 
 **Key finding**: Vtable identity alone is insufficient — constructor/layout/init state matters. The controller object's C++ class layout must match the vtable's method expectations.
 
-### 3. ATT Server Spec Compliance (Not Blocking)
+### 3. ATT Server Spec Compliance — COMPLETED 2026-09-19
 
-These are correctness improvements, not blockers. Fix one at a time, test between each.
+All five items fixed in `src/att_server.py`, covered by `tests/test_att_server.py` (11 tests, socket-free via fake connection):
 
-1. Read Blob error code (0x01 → 0x07)
-2. MTU caps on Read/Notify PDUs
-3. PDU length validation
-4. ATT permission checking
-5. Diagnostic handle labels
+1. Read Blob edge: `offset == len` now returns an empty success blob; only `offset > len` sends Invalid Offset (0x07). (The handler already sent 0x07, not 0x01 — the remaining bug was the `>=` comparison rejecting the legal exact-end offset.)
+2. MTU caps on Read/Notify PDUs: read/blob/notify were already capped; Read By Group Type, Read By Type, and Find Info responses are now truncated to whole entries that fit `MTU - 2` (entries never split, per spec).
+3. PDU length validation: group/type requests with a non-2/16-byte trailing UUID now get Invalid PDU (0x04); CCCD writes with length != 2 get Invalid Attribute Value Length (0x0D, new `ATT_ERR_INVALID_ATTR_LEN`).
+4. ATT permission checking: reads require the READ bit, Write Requests require WRITE/WNR, Write Commands require WNR (silently dropped otherwise — commands have no response). Declaration attributes (properties == 0 by construction) stay readable. Denials are logged to a new `_diag_perm_denied` list in the disconnect summary.
+5. Diagnostic handle labels: the stale hardcoded handle maps (wrong for any rebuilt DB) are replaced by `_handle_label()`, derived from the live database (service/characteristic names, CCCD ownership, report ID + input/output/feature from Report Reference descriptors).
 
 ### 4. Full Firmware Dump — DOWNGRADED (no longer blocking protocol work)
 

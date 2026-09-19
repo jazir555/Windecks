@@ -66,8 +66,9 @@ The fix: a raw L2CAP socket on CID 4 bound directly to `C2:12:34:56:78:9A` with 
 
 ## What Needs to Happen Next
 
-1. **ATT Server Spec Compliance** (one at a time, test each): Read Blob error code (0x01→0x07), MTU caps on Read/Notify, PDU length validation, ATT permission checking, diagnostic handle labels.
-2. **Full flash dump** — `ibex_firmware.bin` is 66.9% of nRF52833's 512 KB flash. Command descriptors at 0x59b10–0x5a332 beyond the dump (and outside every Valve DFU ever shipped — see `research/firmware-dump-assessment.md`). J-Link/SWD needed.
+1. ~~**ATT Server Spec Compliance**~~ — done 2026-09-19 (all 5 items fixed + `tests/test_att_server.py`, see `docs/findings-backlog.md` §3).
+2. ~~**Full flash dump**~~ — downgraded 2026-09-19: descriptors are factory-partition metadata no DFU carries; all wire-visible behavior implemented from sc26re/SDL (see `research/firmware-dump-assessment.md` follow-up). SWD only matters for firmware-internal questions now.
+3. **Over-the-air `--mode ble` validation** — needs a second device (`src/verify_windows_ble.py` ready).
 
 ## Files to Read Before Making Changes
 

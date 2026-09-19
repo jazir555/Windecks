@@ -47,7 +47,7 @@ _SC2_CMD_NAMES = {
     0xAE: "GET_SERIAL", 0xB4: "PROTOCOL_VERSION",
     0xB5: "PROTOCOL_COMMAND", 0xBA: "GET_CHIP_ID",
     0xEE: "FEATURE_REPORT_WRITE", 0xEF: "FEATURE_REPORT_READ",
-    0x95: "ENTER_BOOTLOADER", 0xF2: "MAPPING_ACK",
+    0x95: "ENTER_BOOTLOADER", 0xF2: "GET_SYSTEM_INFO",
 }
 
 from gatt_db import (
@@ -64,8 +64,12 @@ from gatt_db import (
     ATT_ERR_INVALID_HANDLE, ATT_ERR_READ_NOT_PERM, ATT_ERR_WRITE_NOT_PERM,
     ATT_ERR_ATTR_NOT_FOUND, ATT_ERR_REQ_NOT_SUPP, ATT_ERR_INVALID_OFFSET,
     ATT_ERR_INVALID_PDU,
+    ATT_PROP_READ, ATT_PROP_WRITE, ATT_PROP_WRITE_NO_RSP,
     GATT_PRIM_SVC_UUID, GATT_CHARAC_UUID, uuid16_to_bytes,
 )
+
+# Invalid Attribute Value Length (Core Spec Vol 3, Part F, 3.4.1.1).
+ATT_ERR_INVALID_ATTR_LEN = 0x0D
 
 AF_BLUETOOTH = 31
 BTPROTO_L2CAP = 0
@@ -76,8 +80,10 @@ BT_SECURITY = 4
 BT_SECURITY_LOW = 1
 BT_SECURITY_MEDIUM = 2
 
-# Load libc for ctypes bind
-_libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+# Load libc for ctypes bind (Linux only; None on Windows where the raw
+# L2CAP path is unavailable — win_ble.py is the Windows equivalent).
+_libc_name = ctypes.util.find_library("c")
+_libc = ctypes.CDLL(_libc_name, use_errno=True) if _libc_name else None
 
 
 class AttServer:
@@ -114,7 +120,129 @@ class AttServer:
         self._diag_notif_dropped = defaultdict(int)  # handle -> count of dropped (no CCCD) notifications
         self._diag_writes = []                        # list of (timestamp, handle, uuid_hex, value_hex)
         self._diag_cccd_events = []                   # list of (timestamp, cccd_handle, value_handle, enabled)
+        self._diag_perm_denied = []                   # list of (timestamp, op, handle) permission denials
         self._on_cccd_enabled = None
+
+    # -- ATT spec-compliance helpers ------------------------------------
+    def _parse_uuid_filter(self, data):
+        """Validate the trailing attribute-type UUID of a group/type request.
+
+        Returns (uuid_bytes_or_None, error_code_or_None). Core Spec Vol 3,
+        Part F, 3.4.4: the UUID shall be 16-bit or 128-bit; anything else
+        is a malformed PDU.
+        """
+        trailing = data[5:]
+        if len(trailing) == 0:
+            return None, None
+        if len(trailing) in (2, 16):
+            return trailing if len(trailing) == 2 else None, None
+        return None, ATT_ERR_INVALID_PDU
+
+    def _fit_entries(self, entries, entry_len):
+        """Drop trailing whole entries so the value list fits the MTU.
+
+        RSP headers here are 2 bytes (opcode + length/format), so the list
+        is capped at mtu - 2. Entries are never split (Core Spec Vol 3,
+        Part F, 3.4.4.2: all attribute data in one response shares a size).
+        """
+        budget = max(0, self.mtu - 2)
+        keep = min(len(entries), budget // entry_len) if entry_len else 0
+        return entries[:keep]
+
+    @staticmethod
+    def _readable(attr):
+        # Declaration attributes (service/characteristic declarations) carry
+        # no property bits by construction (properties == 0) and are always
+        # readable; value attributes must have the READ bit.
+        return attr.properties == 0 or bool(attr.properties & ATT_PROP_READ)
+
+    @staticmethod
+    def _writable(attr, is_command):
+        if attr.properties == 0:
+            # Declarations are not writable value attributes.
+            return False
+        if is_command:
+            return bool(attr.properties & ATT_PROP_WRITE_NO_RSP)
+        return bool(attr.properties & (ATT_PROP_WRITE | ATT_PROP_WRITE_NO_RSP))
+
+    def _deny(self, op, handle):
+        self._diag_perm_denied.append((time.strftime('%H:%M:%S'), op, handle))
+
+    def _handle_label(self, handle):
+        """Derive a diagnostic label for any handle from the live database."""
+        attr = self.db.lookup(handle)
+        if attr is None:
+            return "?"
+        cccd = uuid16_to_bytes(0x2902).hex()
+        if attr.uuid.hex() == cccd:
+            vh = self._find_cccd_value_handle(handle)
+            return f"CCCD-for-0x{vh:04x}" if vh is not None else "CCCD"
+        # Characteristic declaration? Name it by its value handle + UUID.
+        if attr.uuid == uuid16_to_bytes(GATT_CHARAC_UUID) and len(attr.value) >= 3:
+            vh = attr.value[1] | (attr.value[2] << 8)
+            return f"decl-for-0x{vh:04x}"
+        # Value attribute: resolve UUID + report reference if present.
+        name = self._uuid_label(attr.uuid)
+        for dh in (handle + 1, handle + 2, handle + 3):
+            d = self.db.lookup(dh)
+            if d is None:
+                break
+            if d.uuid == uuid16_to_bytes(0x2908) and len(d.value) == 2:
+                name += f"(ID{d.value[0]:02X}/{'In' if d.value[1] == 1 else 'Out' if d.value[1] == 2 else 'Feat'})"
+                break
+            if d.uuid in (uuid16_to_bytes(GATT_CHARAC_UUID),
+                          uuid16_to_bytes(GATT_PRIM_SVC_UUID)):
+                break
+        return name
+
+    @staticmethod
+    def _uuid_label(uuid_bytes):
+        from gatt_db import (
+            SVC_GAP, SVC_GATT, SVC_HID, SVC_BATTERY, SVC_DEVICE_INFO,
+            CHR_DEVICE_NAME, CHR_APPEARANCE, CHR_SERVICE_CHANGED,
+            CHR_HID_INFO, CHR_REPORT_MAP, CHR_HID_CONTROL_POINT,
+            CHR_REPORT, CHR_PROTOCOL_MODE, CHR_BATTERY_LEVEL,
+            CHR_MANUFACTURER_NAME, CHR_MODEL_NUMBER, CHR_PNP_ID,
+            CHR_SERIAL_NUMBER, CHR_FIRMWARE_REVISION,
+            CHR_HARDWARE_REVISION, CHR_SOFTWARE_REVISION,
+            SC2_HID_SERVICE_UUID, SC2_INPUT_CH1_UUID, SC2_INPUT_CH2_UUID,
+            SC2_REPORT_CH_UUID,
+        )
+        import uuid as _uuid_mod
+        u = bytes(uuid_bytes)
+        table16 = {
+            SVC_GAP: "GAP", SVC_GATT: "GATT", SVC_HID: "HID",
+            SVC_BATTERY: "BAT", SVC_DEVICE_INFO: "DIS",
+            CHR_DEVICE_NAME: "DevName", CHR_APPEARANCE: "Appear",
+            CHR_SERVICE_CHANGED: "SvcChanged", CHR_HID_INFO: "HIDInfo",
+            CHR_REPORT_MAP: "RepMap", CHR_HID_CONTROL_POINT: "HIDCtrl",
+            CHR_REPORT: "Report", CHR_PROTOCOL_MODE: "ProtoMode",
+            CHR_BATTERY_LEVEL: "Batt", CHR_MANUFACTURER_NAME: "Mfr",
+            CHR_MODEL_NUMBER: "Model", CHR_PNP_ID: "PnP",
+            CHR_SERIAL_NUMBER: "Serial", CHR_FIRMWARE_REVISION: "FwRev",
+            CHR_HARDWARE_REVISION: "HwRev", CHR_SOFTWARE_REVISION: "SwRev",
+        }
+        if len(u) == 2:
+            code = struct.unpack('<H', u)[0]
+            if code == GATT_PRIM_SVC_UUID:
+                return "PrimSvc"
+            if code == GATT_CHARAC_UUID:
+                return "CharDecl"
+            if code == 0x2902:
+                return "CCCD"
+            if code == 0x2908:
+                return "RepRef"
+            return table16.get(code, f"0x{code:04X}")
+        try:
+            s = str(_uuid_mod.UUID(bytes_le=u)).lower()
+        except Exception:
+            return u.hex()
+        return {
+            SC2_HID_SERVICE_UUID.lower(): "ValveSvc",
+            SC2_INPUT_CH1_UUID.lower(): "ValveCh1",
+            SC2_INPUT_CH2_UUID.lower(): "ValveCh2",
+            SC2_REPORT_CH_UUID.lower(): "ValveRep",
+        }.get(s, s[:8])
 
     def start(self):
         """Create socket, bind, listen. Loops to accept connections."""
@@ -137,6 +265,7 @@ class AttServer:
                 self._diag_notif_dropped.clear()
                 self._diag_writes.clear()
                 self._diag_cccd_events.clear()
+                self._diag_perm_denied.clear()
                 
                 # Restore CCCD states for this client if they are bonded/known
                 client_ip = self.conn_addr[0] if self.conn_addr else "unknown"
@@ -186,6 +315,9 @@ class AttServer:
 
     def _create_socket(self):
         """Create and bind the raw L2CAP ATT socket."""
+        if _libc is None:
+            raise OSError("Raw L2CAP ATT server requires Linux "
+                          "(use src/win_ble.py on Windows).")
         self.sock = socket.socket(AF_BLUETOOTH, socket.SOCK_SEQPACKET, BTPROTO_L2CAP)
 
         # NOTE: Do NOT set BT_SECURITY_MEDIUM — it causes BlueZ HOG profile
@@ -285,11 +417,10 @@ class AttServer:
         start_handle = struct.unpack('<H', data[1:3])[0]
         end_handle = struct.unpack('<H', data[3:5])[0]
 
-        uuid_filter = None
-        if len(data) >= 7:
-            uuid_bytes = data[5:]
-            if len(uuid_bytes) == 2:
-                uuid_filter = uuid_bytes
+        uuid_filter, uuid_err = self._parse_uuid_filter(data)
+        if uuid_err is not None:
+            self._send_error(opcode, start_handle, uuid_err)
+            return
 
         print(f"[att] ReadByGroupType: start=0x{start_handle:04x} end=0x{end_handle:04x} uuid_filter={uuid_filter.hex() if uuid_filter else None}")
 
@@ -306,13 +437,16 @@ class AttServer:
         # Build response: each service is handle(2) + end_handle(2) + uuid
         # Note: all returned services in a single RSP must be of the same length.
         first_svc_uuid_len = len(services[0][2])
-        attr_list = b''
+        entries = []
         for svc_start, svc_end, svc_uuid in services:
             if len(svc_uuid) != first_svc_uuid_len:
                 break
-            entry = struct.pack('<HH', svc_start, svc_end) + svc_uuid
+            entries.append((svc_start, svc_end, svc_uuid))
             print(f"  Service: start=0x{svc_start:04x} end=0x{svc_end:04x} uuid={svc_uuid.hex()}")
-            attr_list += entry
+        entry_len = 4 + first_svc_uuid_len
+        entries = self._fit_entries(entries, entry_len)
+        attr_list = b''.join(
+            struct.pack('<HH', s, e) + u for s, e, u in entries)
 
         # Response format: opcode(1) + length(1) + data
         length = 4 + first_svc_uuid_len  # 4 bytes handles + UUID length
@@ -329,11 +463,10 @@ class AttServer:
         start_handle = struct.unpack('<H', data[1:3])[0]
         end_handle = struct.unpack('<H', data[3:5])[0]
 
-        uuid_filter = None
-        if len(data) >= 7:
-            uuid_bytes = data[5:]
-            if len(uuid_bytes) == 2:
-                uuid_filter = uuid_bytes
+        uuid_filter, uuid_err = self._parse_uuid_filter(data)
+        if uuid_err is not None:
+            self._send_error(opcode, start_handle, uuid_err)
+            return
 
         print(f"[att] ReadByType: start=0x{start_handle:04x} end=0x{end_handle:04x} uuid_filter={uuid_filter.hex() if uuid_filter else None}")
 
@@ -349,13 +482,17 @@ class AttServer:
         # Build response: each char is decl_handle(2) + properties(1) + value_handle(2) + uuid
         # Note: all returned characteristics in a single RSP must be of the same length.
         first_char_uuid_len = len(chars[0][3])
-        attr_list = b''
+        entries = []
         for decl_handle, val_handle, props, char_uuid in chars:
             if len(char_uuid) != first_char_uuid_len:
                 break
-            entry = struct.pack('<H', decl_handle) + struct.pack('B', props) + struct.pack('<H', val_handle) + char_uuid
+            entries.append((decl_handle, val_handle, props, char_uuid))
             print(f"  Char: decl=0x{decl_handle:04x} val=0x{val_handle:04x} props=0x{props:02x} uuid={char_uuid.hex()}")
-            attr_list += entry
+        entry_len = 5 + first_char_uuid_len
+        entries = self._fit_entries(entries, entry_len)
+        attr_list = b''.join(
+            struct.pack('<H', d) + struct.pack('B', p)
+            + struct.pack('<H', v) + u for d, v, p, u in entries)
 
         # Response format: opcode(1) + length(1) + data
         length = 5 + first_char_uuid_len  # 2+1+2 + UUID length
@@ -380,11 +517,10 @@ class AttServer:
 
         # Build response: must only contain UUIDs of the same length in a single response
         first_uuid_len = len(descriptors[0][1])
-        attr_list = b''
-        for handle, uuid in descriptors:
-            if len(uuid) != first_uuid_len:
-                break
-            attr_list += struct.pack('<H', handle) + uuid
+        same_len = [(h, u) for h, u in descriptors if len(u) == first_uuid_len]
+        entry_len = 2 + first_uuid_len
+        same_len = self._fit_entries(same_len, entry_len)
+        attr_list = b''.join(struct.pack('<H', h) + u for h, u in same_len)
 
         # Response format: opcode(1) + format(1) + data
         # format: 0x01 for 16-bit UUIDs, 0x02 for 128-bit UUIDs
@@ -405,13 +541,21 @@ class AttServer:
         handle = struct.unpack('<H', data[1:3])[0]
 
         print(f"[att] [{ts}] Read Request: handle=0x{handle:04x}")
-        value = self.db.read_attribute(handle)
-        if value is None:
+        attr = self.db.lookup(handle)
+        if attr is None:
             print(f"[att] [{ts}] Read FAILED: handle=0x{handle:04x} -> ERR_INVALID_HANDLE")
             _proto_log("att_read_req", opcode=f"0x{opcode:02x}", handle=f"0x{handle:04x}",
                        error="INVALID_HANDLE")
             self._send_error(opcode, handle, ATT_ERR_INVALID_HANDLE)
             return
+        if not self._readable(attr):
+            print(f"[att] [{ts}] Read FAILED: handle=0x{handle:04x} -> ERR_READ_NOT_PERM")
+            self._deny("read", handle)
+            _proto_log("att_read_req", opcode=f"0x{opcode:02x}", handle=f"0x{handle:04x}",
+                       error="READ_NOT_PERM")
+            self._send_error(opcode, handle, ATT_ERR_READ_NOT_PERM)
+            return
+        value = self.db.read_attribute(handle)
 
         # Cap response to MTU - 1 per ATT spec
         capped = value[:self.mtu - 1] if len(value) > self.mtu - 1 else value
@@ -441,19 +585,26 @@ class AttServer:
         handle = struct.unpack('<H', data[1:3])[0]
         offset = struct.unpack('<H', data[3:5])[0]
 
-        value = self.db.read_attribute(handle)
-        if value is None:
+        attr = self.db.lookup(handle)
+        if attr is None:
             _proto_log("att_read_blob", opcode=f"0x{opcode:02x}", handle=f"0x{handle:04x}",
                        offset=offset, error="INVALID_HANDLE")
             self._send_error(opcode, handle, ATT_ERR_INVALID_HANDLE)
             return
+        if not self._readable(attr):
+            self._deny("read_blob", handle)
+            _proto_log("att_read_blob", opcode=f"0x{opcode:02x}", handle=f"0x{handle:04x}",
+                       offset=offset, error="READ_NOT_PERM")
+            self._send_error(opcode, handle, ATT_ERR_READ_NOT_PERM)
+            return
+        value = self.db.read_attribute(handle)
 
-        if offset >= len(value):
+        if offset > len(value):
             _proto_log("att_read_blob", opcode=f"0x{opcode:02x}", handle=f"0x{handle:04x}",
                        offset=offset, value_len=len(value), error="INVALID_OFFSET")
             self._send_error(opcode, handle, ATT_ERR_INVALID_OFFSET)
             return
-
+        # offset == len(value) is legal: return an empty (success) blob.
         # Cap to MTU - 1 per ATT spec
         chunk = value[offset:offset + self.mtu - 1]
         resp = struct.pack('B', ATT_OP_READ_BLOB_RSP) + chunk
@@ -494,14 +645,27 @@ class AttServer:
             return
 
         print(f"[att] ✅ Write Request: handle=0x{handle:04x} uuid={attr.uuid.hex()} len={len(value)} data={value.hex()}")
-        
+
+        if not self._writable(attr, is_command=False):
+            print(f"[att] ❌ Write Request FAILED: handle=0x{handle:04x} ERR_WRITE_NOT_PERM")
+            self._deny("write", handle)
+            _proto_log("att_write_req", opcode=f"0x{opcode:02x}", handle=f"0x{handle:04x}",
+                       data=value.hex(), error="WRITE_NOT_PERM")
+            self._send_error(opcode, handle, ATT_ERR_WRITE_NOT_PERM)
+            return
+
         # Record all writes for diagnostics
         ts = time.strftime('%H:%M:%S')
         self._diag_writes.append((ts, handle, attr.uuid.hex(), value.hex()))
-        
+
         cccd_uuid = uuid16_to_bytes(0x2902)
         enable_handle = None
         if attr.uuid == cccd_uuid:
+            if len(value) != 2:
+                _proto_log("att_write_req", opcode=f"0x{opcode:02x}", handle=f"0x{handle:04x}",
+                           data=value.hex(), error="INVALID_ATTR_LEN")
+                self._send_error(opcode, handle, ATT_ERR_INVALID_ATTR_LEN)
+                return
             ccc_value = struct.unpack('<H', value[:2])[0] if len(value) >= 2 else 0
             value_handle = self._find_cccd_value_handle(handle)
             if value_handle is not None:
@@ -560,6 +724,13 @@ class AttServer:
 
         attr = self.db.lookup(handle)
         if attr:
+            if not self._writable(attr, is_command=True):
+                # Write Command has no response: silently drop + count it.
+                self._deny("write_cmd", handle)
+                print(f"[att] ❌ Write Command DROPPED: handle=0x{handle:04x} ERR_WRITE_NOT_PERM")
+                _proto_log("att_write_cmd", opcode=f"0x{opcode:02x}", handle=f"0x{handle:04x}",
+                           data=value.hex(), error="WRITE_NOT_PERM")
+                return
             print(f"[att] ✅ Write Command: handle=0x{handle:04x} uuid={attr.uuid.hex()} len={len(value)} data={value.hex()}")
 
             # Detect SC2 command byte
@@ -574,6 +745,10 @@ class AttServer:
             cccd_uuid = uuid16_to_bytes(0x2902)
             enable_handle = None
             if attr.uuid == cccd_uuid:
+                if len(value) != 2:
+                    _proto_log("att_write_cmd", opcode=f"0x{opcode:02x}", handle=f"0x{handle:04x}",
+                               data=value.hex(), error="INVALID_ATTR_LEN")
+                    return
                 ccc_value = struct.unpack('<H', value[:2])[0] if len(value) >= 2 else 0
                 value_handle = self._find_cccd_value_handle(handle)
                 if value_handle is not None:
@@ -662,15 +837,8 @@ class AttServer:
 
     def _print_active_subscriptions(self):
         """Print which handles currently have active CCCD subscriptions."""
-        handle_names = {
-            0x0012: 'Gamepad(ID1)',
-            0x0019: 'Mouse(ID3)',
-            0x001D: 'Keyboard(ID4)',
-            0x0031: 'SC2_Custom_CH1',
-            0x0034: 'SC2_Custom_CH2',
-        }
         if self._notification_handles:
-            labels = [f'0x{h:04x}({handle_names.get(h, "?")})'for h in sorted(self._notification_handles)]
+            labels = [f'0x{h:04x}({self._handle_label(h)})' for h in sorted(self._notification_handles)]
             print(f"[DIAG] 📋 Active CCCD subscriptions: {labels}")
         else:
             print(f"[DIAG] 📋 Active CCCD subscriptions: (none)")
@@ -683,18 +851,15 @@ class AttServer:
         
         # CCCD events
         print(f"\n[DIAG] CCCD Events ({len(self._diag_cccd_events)} total):")
-        handle_names = {
-            0x0012: 'Gamepad(ID1)', 0x0014: 'Gamepad_CCCD',
-            0x0019: 'Mouse(ID3)', 0x001B: 'Mouse_CCCD',
-            0x001D: 'Keyboard(ID4)', 0x001F: 'Keyboard_CCCD',
-            0x0027: 'Feature_0x85',
-            0x0031: 'SC2_Custom_CH1', 0x0032: 'SC2_CH1_CCCD',
-            0x0034: 'SC2_Custom_CH2', 0x0035: 'SC2_CH2_CCCD',
-        }
         for ts, cccd_h, val_h, enabled in self._diag_cccd_events:
             status = '✅ ENABLED' if enabled else '❌ DISABLED'
-            name = handle_names.get(val_h, '?')
+            name = self._handle_label(val_h)
             print(f"  {ts}  CCCD 0x{cccd_h:04x} → 0x{val_h:04x} ({name}) {status}")
+
+        if self._diag_perm_denied:
+            print(f"\n[DIAG] Permission Denials ({len(self._diag_perm_denied)} total):")
+            for ts, op, h in self._diag_perm_denied:
+                print(f"  {ts}  {op} handle=0x{h:04x} ({self._handle_label(h)})")
         
         # Non-CCCD writes (feature reports etc)
         non_cccd_writes = [(ts, h, u, v) for ts, h, u, v in self._diag_writes 
@@ -702,20 +867,20 @@ class AttServer:
         if non_cccd_writes:
             print(f"\n[DIAG] Non-CCCD Writes ({len(non_cccd_writes)} total):")
             for ts, h, uuid_hex, val_hex in non_cccd_writes:
-                name = handle_names.get(h, '?')
+                name = self._handle_label(h)
                 print(f"  {ts}  handle=0x{h:04x} ({name}) data={val_hex}")
         
         # Notification stats
         print(f"\n[DIAG] Notifications Sent:")
         for h in sorted(self._diag_notif_sent.keys()):
-            name = handle_names.get(h, '?')
+            name = self._handle_label(h)
             print(f"  0x{h:04x} ({name}): {self._diag_notif_sent[h]}")
         if not self._diag_notif_sent:
             print("  (none)")
         
         print(f"\n[DIAG] Notifications DROPPED (no CCCD):")
         for h in sorted(self._diag_notif_dropped.keys()):
-            name = handle_names.get(h, '?')
+            name = self._handle_label(h)
             print(f"  0x{h:04x} ({name}): {self._diag_notif_dropped[h]}")
         if not self._diag_notif_dropped:
             print("  (none)")
