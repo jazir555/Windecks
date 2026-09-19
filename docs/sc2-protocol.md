@@ -276,14 +276,14 @@ The firmware's main command dispatch (`FUN_000383c4` at `0x000383c4`) uses a jum
 
 | Byte | Name | Direction | Description | In Firmware Table |
 |------|------|-----------|-------------|:-----------------:|
-| 0x80 | ID_SET_DIGITAL_MAPPINGS | Host→Device | Set button mappings | Yes |
-| 0x82 | ID_GET_DIGITAL_MAPPINGS | Host→Device | Get current mappings | Yes |
-| 0x84 | ID_GET_ATTRIBUTE_LABEL | Host→Device | Get attribute label | Yes |
+| 0x80 | ID_SET_DIGITAL_MAPPINGS | Host→Device | Set button mappings (stored, returned by 0x82) | Yes |
+| 0x82 | ID_GET_DIGITAL_MAPPINGS | Host→Device | Get current mappings (stored slice, `0xFF` if empty/past end) | Yes |
+| 0x84 | ID_GET_ATTRIBUTE_LABEL | Host→Device | Get attribute label (no string response on this path) | Yes |
 | 0x85 | ID_SET_DEFAULT_DIGITAL_MAPPINGS | Host→Device | Set default mappings | Yes |
 | 0x86 | ID_FACTORY_RESET | Host→Device | Factory reset | Yes |
 | 0x88 | ID_CLEAR_SETTINGS_VALUES | Host→Device | Clear settings | **No** (gap) |
 | 0x89 | ID_GET_SETTINGS_VALUES | Bidirectional | Get current settings | **No** (gap) |
-| 0x8A | ID_GET_SETTING_LABEL | Host→Device | Get setting label | Yes |
+| 0x8A | ID_GET_SETTING_LABEL | Host→Device | Get setting label (no string response on this path) | Yes |
 | 0x8B | ID_GET_SETTINGS_MAXS | Host→Device | Get max values | Yes |
 | 0x8C | ID_GET_SETTINGS_DEFAULTS | Host→Device | Get default values | Yes |
 | 0x8D | ID_SET_CONTROLLER_MODE | Host→Device | Mode switch (lizard ↔ Steam Input) | Yes |
@@ -291,12 +291,14 @@ The firmware's main command dispatch (`FUN_000383c4` at `0x000383c4`) uses a jum
 | 0x9F | ID_TURN_OFF_CONTROLLER | Host→Device | Turn off controller | Yes |
 | 0xA1 | ID_GET_DEVICE_INFO | Host→Device | Get device info | Yes |
 | 0xBA | ID_GET_CHIP_ID | Bidirectional | Get chip ID | Yes |
+| 0xBE | GET_BATTERY_DATA | Host→Device | Battery query (empty body on this path) | n/a (open firmware) |
+| 0xC1 | ID_SET_AUDIO_MAPPING | Host→Device | Audio mapping (ACK-only, no audio HW) | n/a (open firmware) |
 | 0xB4 | PROTOCOL_VERSION | Host→Device | Protocol version query | Yes |
 | 0xB5 | PROTOCOL_COMMAND | Host→Device | Protocol command (generic ack) | Yes |
 | 0xEE | FR_MSG_WRITE | Host→Device | Feature report message write | Yes |
 | 0xEF | FR_MSG_READ | Host→Device | Feature report message read | Yes |
 | 0x95 | ENTER_BOOTLOADER | Host→Device | Enter bootloader (ack, no reboot) | Yes |
-| 0xF2 | MAPPING_ACK | Bidirectional | Mapping ACK — minimal 6-byte response after 0xe7 commands | Yes |
+| 0xF2 | GET_SYSTEM_INFO | Bidirectional | Version query (3 selector variants: build info / fixed blob / uptime). Distinct from the 6-byte mapping ACK `[01 00 00 00 00 F2]`, which is a firmware-IPC notification sent after mapping commands, not a feature response | Yes |
 
 ### Additional Commands in Firmware (not in steamclient.so RE)
 
@@ -308,6 +310,20 @@ The firmware handles ~80 additional commands across these categories:
 - **Firmware** (6 commands): firmware update, bootloader entry, version queries
 - **Input Report** (1 command): report mode switching
 - **LED** (2 commands): RGB LED control
+
+All of the above now have explicit handlers in `src/sc2_commands.py`
+(stores where Steam reads them back: digital mappings, settings, LED,
+user store; version-accurate responses: attributes, serial, device info,
+chip ID, system info; safe ACKs for everything destructive or
+hardware-bound). The full Steam-client opcode enum — including
+dongle/radio (`0xAD`, `0xAF`–`0xB3`, `0xC4`), audio update
+(`0xB6`–`0xB9`), extra calibration (`0xA7`, `0xA9`–`0xAC`, `0xBF`) and
+Deck-only (`0xEA`, `0xEB`) codes — is vendored in sc26re's
+`app/src/sdl/controller_constants.h`; the spoof ACKs them all without
+acting. No firmware dump was needed for any of this: the open
+firmware's handler semantics plus the SDL headers plus live captures
+cover everything wire-visible (see
+`research/firmware-dump-assessment.md` follow-up).
 
 ### Response Formatter
 

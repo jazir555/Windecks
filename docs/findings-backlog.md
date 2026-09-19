@@ -181,9 +181,11 @@ These are correctness improvements, not blockers. Fix one at a time, test betwee
 4. ATT permission checking
 5. Diagnostic handle labels
 
-### 4. Full Firmware Dump
+### 4. Full Firmware Dump — DOWNGRADED (no longer blocking protocol work)
 
 `ibex_firmware.bin` is 66.9% of nRF52833's 512KB flash. Command descriptors at 0x59b10–0x5a332 beyond the dump. J-Link/SWD needed for full flash dump and further firmware RE.
+
+Update 2026-09-19: the missing descriptors are firmware-internal dispatch metadata in a factory partition no DFU has ever carried — a spoof does not need them. All wire-visible behavior has since been implemented from sc26re handler semantics + the SDL opcode enum (`src/sc2_commands.py`: 0x80/0x82 mapping store, 0xF2 version variants, 0x84/0x8A/0xBE, dongle/audio/calibration/Deck-only ACKs). The dump is now interesting only for firmware-internal questions. See `research/firmware-dump-assessment.md` follow-up.
 
 ### 5. Steam Haptics — ABANDONED
 

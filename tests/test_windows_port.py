@@ -97,6 +97,54 @@ def test_sc2_dangerous_opcodes_ack_only():
         assert resp is not None and resp[0] == cmd and resp[1] == 0x00 and len(resp) == 64
 
 
+def test_sc2_extended_ack_only():
+    h = SC2CommandHandler()
+    for cmd in (0xA7, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAF, 0xB0, 0xB1,
+                0xB2, 0xB3, 0xB6, 0xB7, 0xB8, 0xB9, 0xBF, 0xC1, 0xC4,
+                0xEA, 0xEB):
+        resp = h.handle_set_report(3, 0x01, bytes([cmd] + [0] * 63))
+        assert resp is not None and resp[0] == cmd and resp[1] == 0x00 and len(resp) == 64
+
+
+def test_sc2_labels_and_battery():
+    h = SC2CommandHandler()
+    for cmd in (0x84, 0x8A, 0xBE):
+        resp = h.handle_set_report(3, 0x01, bytes([cmd] + [0] * 63))
+        assert resp is not None and resp[0] == cmd and resp[1] == 0x00 and len(resp) == 64
+
+
+def test_sc2_digital_mappings_store():
+    h = SC2CommandHandler()
+    # Empty store reads back the 0xFF marker.
+    e = h.handle_set_report(3, 0x01, bytes([0x82, 0x00, 0x00] + [0] * 61))
+    assert e[:3] == bytes([0x82, 0x01, 0xFF]), e[:3].hex()
+    # Store a blob via 0x80 ([1] = body length, body at [2:]).
+    blob = bytes(range(1, 11))
+    h.handle_set_report(3, 0x01, bytes([0x80, len(blob)]) + blob + bytes(64 - 2 - len(blob)))
+    r = h.handle_set_report(3, 0x01, bytes([0x82, 0x00, 0x00] + [0] * 61))
+    assert r[0] == 0x82 and r[1] == len(blob) and r[2:2 + len(blob)] == blob
+    # Offset slice + past-the-end marker.
+    r2 = h.handle_set_report(3, 0x01, bytes([0x82, 0x00, 0x04] + [0] * 61))
+    assert r2[2:2 + 6] == blob[4:]
+    r3 = h.handle_set_report(3, 0x01, bytes([0x82, 0x00, 0x3C] + [0] * 61))
+    assert r3[:3] == bytes([0x82, 0x01, 0xFF])
+    # 0x81 clears the store.
+    h.handle_set_report(3, 0x01, bytes([0x81, 0x00] + [0] * 62))
+    r4 = h.handle_set_report(3, 0x01, bytes([0x82, 0x00, 0x00] + [0] * 61))
+    assert r4[:3] == bytes([0x82, 0x01, 0xFF])
+
+
+def test_sc2_system_info_variants():
+    h = SC2CommandHandler()
+    v0 = h.handle_set_report(3, 0x01, bytes([0xF2, 0x00, 0x00] + [0] * 61))
+    assert v0[0] == 0xF2 and v0[1] == 0x29 and len(v0) == 64
+    assert v0[3:7] == bytes([0x74, 0xFE, 0x3B, 0x6A])  # build timestamp LE
+    v1 = h.handle_set_report(3, 0x01, bytes([0xF2, 0x00, 0x01] + [0] * 61))
+    assert v1[0] == 0xF2 and v1[1] == 34 and v1[2] == 0x01 and len(v1) == 64
+    v2 = h.handle_set_report(3, 0x01, bytes([0xF2, 0x00, 0x02] + [0] * 61))
+    assert v2[:3] == bytes([0xF2, 0x09, 0x02]) and len(v2) == 64
+
+
 def test_sc2_device_info_led_userstore():
     h = SC2CommandHandler()
     d = h.handle_set_report(3, 0x01, bytes([0xA1, 0x00, 0x01] + [0] * 61))

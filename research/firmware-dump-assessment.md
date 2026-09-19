@@ -100,3 +100,29 @@ registry (defaults only, no copied code):
 1. SWD full-flash dump (descriptors at `0x64500+` in current builds).
 2. Over-the-air `--mode ble` validation against Steam (advertising STARTED
    locally; HOGP interop untested).
+
+## Follow-up (2026-09-19): the dump is not needed for protocol completeness
+
+Re-examined what the missing descriptor structs would actually unlock for a
+host-side spoof: nothing wire-visible. They are firmware-internal dispatch
+metadata (per-command handler pointers/sizes in a factory partition no DFU
+has ever carried — proven above across all 30 builds). Everything Steam can
+observe is already covered without them:
+
+- **Handler semantics** — sc26re's `app/src/valve_feature.c` is working
+  firmware flashed onto real controllers: digital-mapping store (0x80/0x82),
+  version variants (0xF2 selectors), empty-body battery response (0xBE),
+  label no-ops (0x84/0x8A), per-link attribute shapes. Ported into
+  `src/sc2_commands.py` (semantics only, no AGPL code copied).
+- **Opcode space** — sc26re's `app/src/sdl/controller_constants.h` (from
+  Steam-client headers) enumerates dongle/radio, audio-update, extra
+  calibration and Deck-only codes the firmware table never named.
+- **Deliberately not changed** — the 0x83 GET_ATTRIBUTES response keeps its
+  captured 9-attribute shape (registers Steam end-to-end) even though
+  sc26re's BLE link answers 5 attributes; documented in code.
+
+No Ghidra work was required: without the missing bytes there is nothing to
+disassemble, and source-form semantics from sc26re strictly dominate RE for
+handler behavior. The SWD dump remains interesting only for firmware-internal
+questions (descriptor layout, factory partition map), none of which block
+the spoof. `tests/test_windows_port.py`: 22/22 pass.

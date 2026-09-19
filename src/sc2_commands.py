@@ -9,22 +9,36 @@ Protocol (Steam <-> controller via Feature Reports):
   1. Host SET_REPORT (Feature, ID 0x01/0x02) with command bytes, e.g. [0x83 ...]
   2. Host GET_REPORT (Feature, same ID) reads the queued 64-byte response.
 
-Covers: 0x81 CLEAR_MAPPINGS, 0x82 GET_DIGITAL_MAPPINGS, 0x83 GET_ATTRIBUTES,
-0x85 SET_DEFAULT_DIGITAL_MAPPINGS, 0x86 FACTORY_RESET (in-memory only),
-0x87 SET_SETTINGS_VALUES, 0x88 CLEAR_SETTINGS_VALUES, 0x89 GET_SETTINGS_VALUES,
-0x8B GET_SETTINGS_MAXS, 0x8C GET_SETTINGS_DEFAULTS, 0x8D SET_CONTROLLER_MODE,
-0x8E LOAD_DEFAULT_SETTINGS, 0x90/0x95 reboot (ACK-only, never acted on),
-0x9F TURN_OFF (ACK-only), 0xA1 GET_DEVICE_INFO, 0xAE GET_SERIAL,
-0xB4/B5 protocol, 0xBA GET_CHIP_ID, 0xC5/E9 SET/GET_LED_COLOR,
+Covers: 0x80 SET_DIGITAL_MAPPINGS, 0x81 CLEAR_MAPPINGS, 0x82 GET_DIGITAL_MAPPINGS,
+0x83 GET_ATTRIBUTES, 0x84 GET_ATTRIBUTE_LABEL (no-op), 0x85 SET_DEFAULT_DIGITAL_MAPPINGS,
+0x86 FACTORY_RESET (in-memory only), 0x87 SET_SETTINGS_VALUES, 0x88 CLEAR_SETTINGS_VALUES,
+0x89 GET_SETTINGS_VALUES, 0x8A GET_SETTING_LABEL (no-op), 0x8B GET_SETTINGS_MAXS,
+0x8C GET_SETTINGS_DEFAULTS, 0x8D SET_CONTROLLER_MODE, 0x8E LOAD_DEFAULT_SETTINGS,
+0x90/0x95 reboot (ACK-only, never acted on), 0x9F TURN_OFF (ACK-only),
+0xA1 GET_DEVICE_INFO, 0xAE GET_SERIAL, 0xB4/B5 protocol, 0xBA GET_CHIP_ID,
+0xBE GET_BATTERY_DATA (empty body), 0xC0/C1/C2/C3/C5/CE/D8/E2 calibration/audio/LED/IMU,
 0xDB/DC user store, 0xED/EE/EF/F0 READ/STAGE/COMMIT/DELETE_SETTING,
-0xEE/0xEF feature messages, 0x95 bootloader,
-0xF2 MAPPING_ACK. See docs/sc2-protocol.md.
+0xF2 GET_SYSTEM_INFO (version variants), 0xFE provisioning (ACK-only),
+plus dongle/radio (0xAD/0xAF-0xB3), audio-update (0xB6-0xB9), calibration
+(0xA7/0xA9-0xAC/0xBF/0xC4) and Deck-only (0xEA/0xEB) ACK-only codes.
+See docs/sc2-protocol.md.
 
 Opcode sources: mwdmwd/sc26re app/src/valve_feature.h (authoritative enum
-from working open firmware) and CouchTurtle/sc2-research
+from working open firmware), app/src/valve_feature.c (handler semantics:
+digital-mapping store, version variants, empty-body battery response),
+app/src/sdl/controller_constants.h (full Steam-client opcode enum incl.
+dongle/audio/calibration codes) and CouchTurtle/sc2-research
 docs/FIRMWARE_PROTOCOL.md (update protocol, settings registry, opcodes).
 Settings defaults (83 registers) transcribed from sc26re
 app/src/ibex_settings_registry.c SETTING_ENTRY(default, min, max, ...).
+
+NOTE on the "full firmware dump" gap (research/firmware-dump-assessment.md):
+the missing command-descriptor structs live in a flash region no Valve DFU
+has ever carried (factory partition), so no download substitutes for an SWD
+dump — but a spoof does not need them. They are firmware-internal dispatch
+metadata; everything wire-visible is already covered here from sc26re (which
+flashes onto real controllers) + the SDL headers + live captures. No Ghidra
+work is required for protocol completeness.
 """
 import struct
 
@@ -58,21 +72,57 @@ SC2_SETTING_DEFAULTS = {
 }
 
 # Opcodes that are ACK-only on a spoofed device: real hardware would reboot,
-# power off, wipe, or (re)calibrate. We return success bytes and never act.
+# power off, wipe, calibrate, provision, or talk to dongle/radio/audio
+# hardware. We return success bytes and never act.
 ACK_ONLY_OPCODES = frozenset([
     0x86,  # FACTORY_RESET (handled: restores in-memory defaults + ACK)
     0x90,  # REBOOT_TO_ISP (bootloader)
     0x95,  # FIRMWARE_UPDATE_REBOOT
     0x9F,  # TURN_OFF_CONTROLLER
     0xA2,  # WRITE_CALIBRATION_DATA
+    0xA7,  # CALIBRATE_TRACKPADS
+    0xA9,  # SET_SERIAL_NUMBER
+    0xAA,  # GET_TRACKPAD_CALIBRATION
+    0xAB,  # GET_TRACKPAD_FACTORY_CALIBRATION
+    0xAC,  # GET_TRACKPAD_RAW_DATA
+    0xAD,  # ENABLE_PAIRING (dongle/radio)
+    0xAF,  # RADIO_ERASE_RECORDS
+    0xB0,  # RADIO_WRITE_RECORD
+    0xB1,  # SET_DONGLE_SETTING
+    0xB2,  # DONGLE_DISCONNECT_DEVICE
+    0xB3,  # DONGLE_COMMIT_DEVICE
     0xB5,  # CALIBRATE_GYRO
+    0xB6,  # PLAY_AUDIO
+    0xB7,  # AUDIO_UPDATE_START
+    0xB8,  # AUDIO_UPDATE_DATA
+    0xB9,  # AUDIO_UPDATE_COMPLETE
+    0xBF,  # CALIBRATE_JOYSTICK
     0xC0,  # CALIBRATE_ANALOG_TRIGGERS
+    0xC1,  # SET_AUDIO_MAPPING
     0xC2,  # CHECK_GYRO_FW_LOAD
     0xC3,  # CALIBRATE_PRESSURE_SENSORS
+    0xC4,  # DONGLE_GET_CONNECTED_SLOTS
     0xCE,  # RESET_IMU
     0xD8,  # CALIBRATE_TRACKPAD_STICK
     0xE2,  # SET_TRACKPAD_SIDE
+    0xEA,  # TRIGGER_HAPTIC_CMD (Deck only)
+    0xEB,  # TRIGGER_RUMBLE_CMD (Deck only)
     0xFE,  # WRITE_PROVISIONING
+])
+
+# Digital-mapping store capacity, matching sc26re's 60-byte buffer.
+DIGITAL_MAPPING_CAPACITY = 60
+
+# GET_SYSTEM_INFO (0xF2) version constants, matching sc26re's open firmware
+# (VALVE_PROTOCOL_BUILD_TIMESTAMP / VALVE_PROTOCOL_BUILD_SHA /
+# VALVE_BLE_HARDWARE_ID). Facts about the wire protocol, not copied code.
+SYSINFO_BUILD_TIMESTAMP = 0x6A3BFE74
+SYSINFO_BUILD_SHA = b"a371f66dd017"
+SYSINFO_HW_ID = 0x49
+SYSINFO_VARIANT1 = bytes([
+    0x01, 0x00, 0x74, 0xFE, 0x3B, 0x6A, 0x61, 0x33, 0x37, 0x31, 0x66, 0x36,
+    0x36, 0x64, 0x64, 0x30, 0x31, 0x37, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ])
 
 
@@ -85,6 +135,7 @@ class SC2CommandHandler:
         self._staged_settings = {}  # 0xEE-staged, applied by 0xEF
         self._user_store = {}       # 0xDB/0xDC key -> bytes
         self._led_color = bytes(4)  # 0xC5/E9 RGBW
+        self._digital_mappings = bytearray()  # 0x80/0x82 store (cap 60)
         self._pending_response = {}  # report_id -> bytes (64)
 
     # -- HID-level entry points -------------------------------------------
@@ -113,11 +164,13 @@ class SC2CommandHandler:
         cmd = data[0] if len(data) > 0 else 0
         if cmd == 0x85 or report_id == 0x85:
             return self._handle_mode_switch(data)
-        if cmd in (0x81, 0x83, 0x86, 0x87, 0x88, 0x89, 0x8B, 0x8C, 0x8D,
-                   0x8E, 0x90, 0x95, 0x9F, 0xA1, 0xA2, 0xAE, 0xB4, 0xB5,
-                   0xBA, 0xC0, 0xC2, 0xC3, 0xC5, 0xCE, 0xD8, 0xDB, 0xDC,
-                   0xE2, 0xE9, 0xED, 0xEE, 0xEF, 0xF0,
-                   0xF2, 0x95, 0x82, 0xFE):
+        if cmd in (0x80, 0x81, 0x82, 0x83, 0x84, 0x86, 0x87, 0x88, 0x89,
+                   0x8A, 0x8B, 0x8C, 0x8D, 0x8E, 0x90, 0x95, 0x9F, 0xA1,
+                   0xA2, 0xA7, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF,
+                   0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8,
+                   0xB9, 0xBA, 0xBE, 0xBF, 0xC0, 0xC1, 0xC2, 0xC3, 0xC4,
+                   0xC5, 0xCE, 0xD8, 0xDB, 0xDC, 0xE2, 0xE9, 0xEA, 0xEB,
+                   0xED, 0xEE, 0xEF, 0xF0, 0xF2, 0x95, 0x82, 0xFE):
             return self._handle_sc2_command(report_id, data)
         if cmd == 0x8F:
             return self._handle_haptic_command(data)
@@ -163,6 +216,11 @@ class SC2CommandHandler:
             return b"\x00" * 64
         cmd = value[0]
         if cmd == 0x83:  # GET_ATTRIBUTES
+            # NOTE: this 9-attribute captured shape registers Steam
+            # end-to-end (verified). sc26re's open firmware answers the BLE
+            # link with 5 attributes instead (tags 1,2,10,4,9; tag2=0,
+            # tag10=BLE caps 0x68D2F92E, tag1=USB PID). Steam accepts both;
+            # do not "fix" this without re-running registration.
             return bytes(bytearray([
                 0x83, 0x2d,
                 0x01, 0x03, 0x13, 0x00, 0x00,
@@ -189,7 +247,8 @@ class SC2CommandHandler:
             resp = bytearray([0xBA, 0x11, 0x00]) + chip_id
             resp += bytearray(64 - len(resp))
             return bytes(resp)
-        if cmd == 0x81:
+        if cmd == 0x81:  # CLEAR_MAPPINGS — also drops stored 0x80 blob
+            self._digital_mappings = bytearray()
             return bytes(bytearray([0x81, 0x00]) + bytearray(62))
         if cmd == 0x87:  # SET_SETTINGS_VALUES — persist register for 0x89 reads
             register = value[3] if len(value) > 3 else 0
@@ -239,11 +298,31 @@ class SC2CommandHandler:
                 reg = value[3 + i] if len(value) > 3 + i else 0
                 self._settings_store.pop(reg, None)
             return bytes(bytearray([0x88, num_regs]) + bytearray(62))
-        if cmd in (0x90, 0x95, 0x9F, 0xA2, 0xB5, 0xC0, 0xC2, 0xC3,
-                   0xCE, 0xD8, 0xE2, 0xFE):
-            # ACK-only: reboot/poweroff/calibration/provisioning would be
+        if cmd in ACK_ONLY_OPCODES:
+            # Reboot/poweroff/calibration/provisioning/dongle/audio would be
             # destructive or meaningless without hardware. Never acted on.
             return bytes(bytearray([cmd, 0x00]) + bytearray(62))
+        if cmd == 0x80:  # SET_DIGITAL_MAPPINGS — store blob for 0x82 reads
+            body_len = value[1] if len(value) > 1 else 0
+            body = bytes(value[2:2 + body_len]) if len(value) > 2 else b""
+            self._digital_mappings = bytearray(body[:DIGITAL_MAPPING_CAPACITY])
+            return bytes(bytearray([0x80, 0x00]) + bytearray(62))
+        if cmd == 0x82:  # GET_DIGITAL_MAPPINGS — stored slice or 0xFF
+            start = value[2] if len(value) > 2 else 0
+            if start >= len(self._digital_mappings):
+                return bytes(bytearray([0x82, 0x01, 0xFF]) + bytearray(61))
+            chunk = bytes(self._digital_mappings[start:start + 61])
+            resp = bytearray([0x82, len(chunk)]) + chunk
+            resp += bytearray(64 - len(resp))
+            return bytes(resp)
+        if cmd in (0x84, 0x8A):  # GET_ATTRIBUTE_LABEL / GET_SETTING_LABEL
+            # Real firmware has no string-label responses for these on this
+            # path (open firmware returns "not supported", i.e. zeros).
+            return bytes(bytearray([cmd, 0x00]) + bytearray(62))
+        if cmd == 0xBE:  # GET_BATTERY_DATA — empty body on this path
+            return bytes(bytearray([0xBE, 0x00]) + bytearray(62))
+        if cmd == 0xF2:  # GET_SYSTEM_INFO — version variants
+            return self._handle_get_system_info(value)
         if cmd == 0xA1:  # GET_DEVICE_INFO — sc26re prepare_device_info shape
             selector = value[2] if len(value) > 2 else 0
             if selector == 1:
@@ -293,8 +372,6 @@ class SC2CommandHandler:
             self._settings_store.pop(reg, None)
             self._staged_settings.pop(reg, None)
             return bytes(bytearray([0xF0, 0x00]) + bytearray(62))
-        if cmd == 0xF2:
-            return bytes(bytearray([0x01, 0x00, 0x00, 0x00, 0x00, 0xF2]) + bytearray(58))
         if cmd == 0x85:
             return bytes(bytearray([0x85, 0x00]) + bytearray(62))
         if cmd == 0x8D:
@@ -319,9 +396,35 @@ class SC2CommandHandler:
                 resp += bytes([reg, val & 0xFF, (val >> 8) & 0xFF])
             resp += bytearray(64 - len(resp))
             return bytes(resp)
-        if cmd == 0x82:
-            return bytes(bytearray([0x82, 0xFF, 0x02]) + bytearray(61))
         return bytes(bytearray([cmd, 0x00]) + bytearray(62))
+
+    def _handle_get_system_info(self, value):
+        """GET_SYSTEM_INFO (0xF2) version variants.
+
+        Selector in value[2]: 0 = build timestamp + HW id + build SHA +
+        unit serial; 1 = fixed 34-byte variant; 2 = uptime + zero word
+        (uptime unknown on a spoof, returns zeros). Response[1] is the
+        payload length. Distinct from the 6-byte mapping ACK
+        [01 00 00 00 00 F2], which is a firmware-IPC notification sent
+        after mapping commands, not a feature-report response.
+        """
+        selector = value[2] if len(value) > 2 else 0
+        if selector == 1:
+            resp = bytearray([0xF2, len(SYSINFO_VARIANT1)]) + SYSINFO_VARIANT1
+            resp += bytearray(64 - len(resp))
+            return bytes(resp)
+        if selector == 2:
+            resp = bytearray([0xF2, 0x09, 0x02, 0, 0, 0, 0, 0, 0, 0, 0])
+            resp += bytearray(64 - len(resp))
+            return bytes(resp)
+        serial = b"F0000-0000-00000000"[:16].ljust(16, b"\x00")
+        resp = bytearray([0xF2, 0x29, 0x00])
+        resp += struct.pack("<I", SYSINFO_BUILD_TIMESTAMP)
+        resp += struct.pack("<I", SYSINFO_HW_ID)
+        resp += SYSINFO_BUILD_SHA[:16].ljust(16, b"\x00")
+        resp += serial
+        resp += bytearray(64 - len(resp))
+        return bytes(resp)
 
 
 # Backfill the UHID-style public aliases.
