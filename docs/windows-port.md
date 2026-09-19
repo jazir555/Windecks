@@ -161,6 +161,18 @@ Verified 2026-09-18: Intel went `Error/CM_PROB_FAILED_ADD` (problem status
 `3221225473`) → `OK/CM_PROB_NONE`, BTHUSB logged only Event 18 (link-key
 notice, benign) with no new Event 6/34, and `--mode ble` advertising
 succeeded.
+
+Realtek WiFi (2026-09-19): the PID_C820 dongle's WiFi NIC (`&MI_02`,
+8821CU) and BT (`&MI_00`) share one composite parent
+(`USB\VID_0BDA&PID_C820\123456`), which the fix disabled → both functions
+went phantom, WiFi included. WiFi is NOT gated by the one-radio BT policy,
+so `scripts/enable-realtek-wifi.ps1` revives it: enable composite + WiFi
+function, then individually disable only the BT function (MI_00) so Intel
+stays the sole BT radio. Verified result: composite `OK`, 8821CU `OK`
+(Wi-Fi adapter present, radio Hardware+Software On), Intel BT still `OK`,
+Realtek BT `CM_PROB_DISABLED`. It is hardware-up but not connected to any
+network (needs the SSID/passphrase; `netsh wlan show networks` requires
+elevation + Location service).
 Re-enable the dongle later with:
 `Enable-PnpDevice -InstanceId 'USB\VID_0BDA&PID_C820*' -Confirm:$false`.
 If Intel is still Code 31 after the script: cold reboot (full shutdown, not
