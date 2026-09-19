@@ -62,6 +62,13 @@ def main(argv=None):
     def on_rumble(large, small, led=0):
         print(f"[rumble] host -> device: large={large} small={small} led={led}")
 
+    def on_ble_feature(data):
+        print(f"[ble] feature write: {len(data)} B id=0x{data[0]:02X}" if data
+              else "[ble] feature write: empty")
+
+    def on_ble_haptic(left, right):
+        print(f"[ble] haptic 0x80: left={left} right={right}")
+
     if args.mode in ("vigem", "both"):
         if not HAS_VGAMEPAD:
             print("[-] vgamepad/ViGEmBus not available: install the ViGEmBus "
@@ -86,7 +93,9 @@ def main(argv=None):
         else:
             try:
                 from win_ble import WinBleServer
-                ble = WinBleServer(device_name=args.name)
+                ble = WinBleServer(device_name=args.name,
+                                   on_feature_write=on_ble_feature,
+                                   on_haptic=on_ble_haptic)
                 ble.start()
                 print(f"[+] BLE GATT server started as '{args.name}'")
             except Exception as e:

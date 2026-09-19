@@ -42,7 +42,7 @@ powershell -File scripts/run-windows.ps1 -Mode vigem
   `VIGEM_ERROR_BUS_NOT_FOUND` at import time — all Windecks imports of it
   are lazy/guarded for this reason.
 
-## BLE validation (2026-09-18, host with Realtek BT + Intel BT)
+## BLE validation (2026-09-18/19, host with Realtek BT + Intel BT)
 
 - GATT database construction via WinRT: **works**. Providers + characteristics
   created with `error=0`, including NOTIFY characteristics and the Valve
@@ -51,6 +51,23 @@ powershell -File scripts/run-windows.ps1 -Mode vigem
   `create_characteristic_async` require `uuid.UUID` (Guid), not `str`;
   characteristic read/write event handlers fire on arbitrary WinRT threads
   and must marshal via `loop.call_soon_threadsafe`.
+- Publication coverage (2026-09-19, `src/win_ble.py`): full `gatt_db` order
+  is mirrored — HID publishes info, protocol mode, report map, control
+  point, inputs 0x01 (12 B) / 0x45 (45 B) / 0x47 (47 B) / mouse / keyboard,
+  outputs 0x02 + haptic 0x80, and all six feature reports
+  (0x02/0x01/0x85/0x86/0x87/0x8F); DIS publishes manufacturer, model,
+  serial (`F0000-...`, matching the `GET_SERIAL` first-byte rule), fw/hw/sw
+  revisions + PnP (`28DE`/`1303`); Battery + Valve ch1/ch2/report are all
+  present. All four providers advertise (HID, Battery, DIS, Valve), not
+  just HID. Feature reads are served from `SC2CommandHandler` so a host
+  `GET_REPORT` after `SET_REPORT` returns the queued response; 0x80 writes
+  are parsed (both full and hog-ll-stripped forms) and delivered to the
+  `on_haptic` callback. `update_reports()` mirrors Linux `forward_report`:
+  45 B → HID 0x45 + Valve ch1, 47 B → HID 0x47 + Valve ch2, plus 12 B /
+  mouse / keyboard / battery.
+- 47-byte note: the Linux Neptune path only ever sends 12 B + 45 B, so
+  `win_input.build_47b()` is a documented placeholder (45 B fields + 2
+  zero bytes) until the firmware ch2 format is confirmed.
 - Advertising: **works on the Intel radio** (verified 2026-09-18 after the
   Code 31 fix below) — `[+] WinRT BLE advertising as 'Steam Controller 2026'
   (4 services)`. It previously failed on the Realtek radio with
@@ -63,7 +80,13 @@ powershell -File scripts/run-windows.ps1 -Mode vigem
 - Status quirk: advertisement status briefly reports ABORTED(3) right after
   start before settling to STARTED(2) — transient on this radio, not fatal
   (logged by the status handler in `win_ble.py`).
-- Still open: over-the-air confirmation from a second device (nRF Connect /
+- OTA verifier (2026-09-19, `src/verify_windows_ble.py`, bleak central):
+  run on a SECOND device while `--mode ble` advertises —
+  `python src/verify_windows_ble.py` scans for the device name, checks all
+  four services, reads PnP (`28DE`/`1303`), battery, HID info, report map,
+  and subscribes to NOTIFY. Same-host scan-while-advertising is not
+  expected to work (radio is in peripheral role). Still open:
+  over-the-air confirmation from a second device (nRF Connect /
   Deck `bluetoothctl` discovery + Steam Input recognizing the SC2).
 
 ## ViGEm validation (2026-09-18, ViGEmBus driver installed)

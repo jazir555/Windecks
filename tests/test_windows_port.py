@@ -16,13 +16,13 @@ from sc2_commands import SC2CommandHandler  # noqa: E402
 from platform_compat import IS_WINDOWS  # noqa: E402
 import win_input  # noqa: E402
 from win_input import (  # noqa: E402
-    SyntheticWinInput, build_12b, build_45b,
+    SyntheticWinInput, build_12b, build_45b, build_47b,
     _axis_to_short, _axis_to_trigger,
 )
 from win_vigem import (  # noqa: E402
     parse_sc2_12b, sc2_buttons_to_xusb_flags, XUSB_FLAG, WinVigemTarget,
 )
-from win_ble import uuid16_str, _winrt_props  # noqa: E402
+from win_ble import uuid16_str, _winrt_props, _parse_haptic_80  # noqa: E402
 
 
 def test_gatt_db_builds():
@@ -115,10 +115,13 @@ def test_synthetic_dict_shape():
     got = []
     src = SyntheticWinInput(on_report=got.append)
     rep = src.make_reports()
-    assert set(rep) == {"gamepad_12b", "gamepad_45b", "mouse_4b", "kbd_8b"}
+    assert set(rep) == {"gamepad_12b", "gamepad_45b", "gamepad_47b",
+                        "mouse_4b", "kbd_8b", "battery"}
     assert rep["gamepad_12b"] == b"\x00" * 12
     assert len(rep["gamepad_45b"]) == 45
+    assert len(rep["gamepad_47b"]) == 47
     assert rep["mouse_4b"] is None and rep["kbd_8b"] is None
+    assert rep["battery"] == 100
 
 
 def test_build_12b_45b_layout():
@@ -131,6 +134,10 @@ def test_build_12b_45b_layout():
     assert struct.unpack_from("<I", r45, 1)[0] == 0x12345678
     assert struct.unpack_from("<I", r45, 29)[0] == 0xDEADBEEF
     assert len(r45) == 45
+    r47 = build_47b(0xAB, 0x12345678, timestamp_us=0xDEADBEEF)
+    assert len(r47) == 47
+    assert r47[:45] == r45
+    assert r47[45:] == b"\x00\x00"
 
 
 def test_axis_conversions():
@@ -242,3 +249,33 @@ def test_winble_server_driver_free():
     s._on_feature(bytes([0x83] + [0] * 63))
     assert seen == [bytes([0x83] + [0] * 63)]
     assert s._sc2 is not None
+
+
+def test_winble_haptic_80_parse_and_callback():
+    import struct
+    from win_ble import WinBleServer
+    # Stripped 9-byte form (hog-ll strips the Report ID):
+    # [0]=type, [1-2]=intensity, [3-4]=left, [5]=gain, [6-7]=right, [8]=gain.
+    stripped = (bytes([0x01, 0x00, 0x00]) + struct.pack("<H", 1000)
+                + bytes([0x00]) + struct.pack("<H", 2000) + bytes([0x00]))
+    assert len(stripped) == 9
+    assert _parse_haptic_80(stripped) == (1000, 2000)
+    # Full form with Report ID prefix (WinRT write path).
+    full = bytes([0x80]) + stripped
+    assert _parse_haptic_80(full) == (1000, 2000)
+    assert _parse_haptic_80(b"\x00") is None
+    seen = []
+    s = WinBleServer(device_name="Test",
+                     on_haptic=lambda l, r: seen.append((l, r)))
+    s._on_haptic_write(stripped)
+    assert seen == [(1000, 2000)]
+
+
+def test_winble_feature_read_roundtrip():
+    from win_ble import WinBleServer
+    s = WinBleServer(device_name="Test")
+    # SET via write path queues a GET_ATTRIBUTES response; the feature
+    # read callback must return it (this is what a host sees on read).
+    s._on_feature(bytes([0x83] + [0] * 63))
+    resp = s._sc2.handle_get_report(3, 0x83)
+    assert resp is not None and resp[0] == 0x83 and len(resp) == 64

@@ -12,7 +12,8 @@ on Windows. This module provides:
 
 Report dict shape (shared with Linux on_report consumers):
     {'gamepad_12b': bytes(12), 'gamepad_45b': bytes(45)|None,
-     'mouse_4b': bytes(4)|None, 'kbd_8b': bytes(8)|None}
+     'gamepad_47b': bytes(47)|None, 'mouse_4b': bytes(4)|None,
+     'kbd_8b': bytes(8)|None, 'battery': int|None}
 
 45-byte SC2 layout mirrors input_handler._parse_neptune_report:
     [0] seq, [1-4] buttons32, [5-6] LT16, [7-8] RT16,
@@ -20,6 +21,12 @@ Report dict shape (shared with Linux on_report consumers):
     [17-20] lpad x/y, [21-22] pressure L, [23-26] rpad x/y,
     [27-28] pressure R, [29-32] timestamp us, [33-44] accel/gyro.
 Pygame has no trackpads/IMU, so those fields stay zero.
+47-byte SC2 layout is not produced by the Linux Neptune path (which only
+sends 12-byte + 45-byte); build_47b() mirrors the 45-byte fields plus two
+trailing zero bytes as a placeholder until the firmware ch2 format is
+confirmed. win_ble forwards gamepad_47b to the HID 0x47 handle and Valve
+ch2 when present, otherwise those characteristics stay at their initial
+zero values.
 """
 
 import struct
@@ -87,12 +94,22 @@ def build_45b(seq_num, buttons32, lx=0, ly=0, rx=0, ry=0,
     return bytes(report45)
 
 
-def empty_reports(gamepad_12b=None, gamepad_45b=None):
+def build_47b(seq_num, buttons32, lx=0, ly=0, rx=0, ry=0,
+               lt16=0, rt16=0, timestamp_us=0):
+    """Placeholder 47-byte SC2 report: 45-byte fields + 2 zero bytes."""
+    return bytes(build_45b(seq_num, buttons32, lx, ly, rx, ry,
+                           lt16, rt16, timestamp_us)) + b"\x00\x00"
+
+
+def empty_reports(gamepad_12b=None, gamepad_45b=None, gamepad_47b=None,
+                  mouse_4b=None, kbd_8b=None, battery=None):
     return {
         "gamepad_12b": gamepad_12b,
         "gamepad_45b": gamepad_45b,
-        "mouse_4b": None,
-        "kbd_8b": None,
+        "gamepad_47b": gamepad_47b,
+        "mouse_4b": mouse_4b,
+        "kbd_8b": kbd_8b,
+        "battery": battery,
     }
 
 
@@ -126,6 +143,8 @@ class SyntheticWinInput:
         return empty_reports(
             gamepad_12b=b"\x00" * 12,
             gamepad_45b=build_45b(self.seq_num, 0, timestamp_us=ts),
+            gamepad_47b=build_47b(self.seq_num, 0, timestamp_us=ts),
+            battery=100,
         )
 
     def _loop(self):
@@ -232,6 +251,8 @@ class PygameWinInput:
         return empty_reports(
             gamepad_12b=build_12b(buttons, lx, ly, rx, ry, lt, rt),
             gamepad_45b=build_45b(self.seq_num, buttons & 0xFFFF,
+                                  lx, ly, rx, ry, lt16, rt16, ts),
+            gamepad_47b=build_47b(self.seq_num, buttons & 0xFFFF,
                                   lx, ly, rx, ry, lt16, rt16, ts),
         )
 
